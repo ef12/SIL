@@ -4,7 +4,7 @@
         {
             "label": "Configure",
             "type": "shell",
-            "command": "cmake -S . -B build/meta -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_PRODUCTION=ON -DBUILD_TESTING=OFF -DARTIFACTS_ROOT:PATH=\"$PWD/build/out\"",
+            "command": "cmake -S . -B build/meta -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_PRODUCTION=ON -DARTIFACTS_ROOT:PATH=\"$PWD/build/out\"",
             "options": {
                 "cwd": "${workspaceFolder}",
                 "env": {
@@ -58,12 +58,9 @@
         {
             "label": "Run Tests",
             "type": "shell",
-            "command": "cmake -S . -B build/meta-tests -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_PRODUCTION=OFF -DBUILD_TESTING=ON -DARTIFACTS_ROOT:PATH=\"$PWD/build/out-tests\"; cmake --build build/meta-tests; ctest --test-dir build/meta-tests --output-on-failure",
+            "command": "ruby -S ceedling test:all",
             "options": {
-                "cwd": "${workspaceFolder}",
-                "env": {
-                    "PATH": "${env:PATH};${env:LOCALAPPDATA}\\Microsoft\\WinGet\\Packages\\Ninja-build.Ninja_Microsoft.Winget.Source_8wekyb3d8bbwe"
-                }
+                "cwd": "${workspaceFolder}/test"
             },
             "presentation": {
                 "reveal": "always",
@@ -71,14 +68,12 @@
                 "clear": true
             },
             "group": "build",
-            "problemMatcher": [
-                "$gcc"
-            ]
+            "problemMatcher": []
         },
         {
             "label": "Clean Tests",
             "type": "shell",
-            "command": "if (Test-Path build/meta-tests) { cmake --build build/meta-tests --target clean }; cmake -E rm -rf build/out-tests; cmake -E rm -rf build/meta-tests/build",
+            "command": "Set-Location test; ruby -S ceedling clobber; cmake -E rm -rf ../ceedling",
             "options": {
                 "cwd": "${workspaceFolder}"
             },

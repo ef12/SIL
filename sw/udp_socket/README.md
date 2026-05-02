@@ -257,6 +257,13 @@ The module is verified by unit tests in:
 
 - sw/udp_socket/test/test_udp_socket.c
 
+Run verification with:
+
+```powershell
+Set-Location test
+ruby -S ceedling test:all
+```
+
 Current tests cover:
 
 - Initialization and close lifecycle

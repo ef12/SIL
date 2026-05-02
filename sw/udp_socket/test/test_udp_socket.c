@@ -8,11 +8,16 @@
 #include <windows.h>
 #endif
 
-void setUp(void) {}
+void setUp(void)
+{
+}
 
-void tearDown(void) {}
+void tearDown(void)
+{
+}
 
-void test_udp_socket_init_and_close_succeeds(void) {
+void test_udp_socket_init_and_close_succeeds(void)
+{
   UdpSocket socket_under_test;
 
   TEST_ASSERT_TRUE(udp_socket_init(&socket_under_test, 7101));
@@ -22,7 +27,8 @@ void test_udp_socket_init_and_close_succeeds(void) {
   TEST_ASSERT_FALSE(socket_under_test.initialized);
 }
 
-void test_udp_socket_send_and_receive_on_loopback(void) {
+void test_udp_socket_send_and_receive_on_loopback(void)
+{
   UdpSocket sender;
   UdpSocket receiver;
   const char payload[] = "can-over-udp";
@@ -34,12 +40,10 @@ void test_udp_socket_send_and_receive_on_loopback(void) {
   TEST_ASSERT_TRUE(udp_socket_init(&sender, 7102));
   TEST_ASSERT_TRUE(udp_socket_init(&receiver, 7103));
 
-  TEST_ASSERT_TRUE(
-      udp_socket_send_to(&sender, "127.0.0.1", 7103, payload, strlen(payload)));
+  TEST_ASSERT_TRUE(udp_socket_send_to(&sender, "127.0.0.1", 7103, payload, strlen(payload)));
 
-  received =
-      udp_socket_receive_from(&receiver, buffer, sizeof(buffer), sender_ip,
-                              sizeof(sender_ip), &sender_port);
+  received = udp_socket_receive_from(&receiver, buffer, sizeof(buffer), sender_ip,
+                                     sizeof(sender_ip), &sender_port);
 
   TEST_ASSERT_EQUAL_INT((int)strlen(payload), received);
   TEST_ASSERT_EQUAL_MEMORY(payload, buffer, strlen(payload));
@@ -50,25 +54,23 @@ void test_udp_socket_send_and_receive_on_loopback(void) {
   udp_socket_close(&sender);
 }
 
-void test_udp_socket_send_fails_with_invalid_inputs(void) {
+void test_udp_socket_send_fails_with_invalid_inputs(void)
+{
   UdpSocket socket_under_test;
   const char payload[] = "x";
 
   TEST_ASSERT_FALSE(udp_socket_send_to(NULL, "127.0.0.1", 7103, payload, 1));
 
   TEST_ASSERT_TRUE(udp_socket_init(&socket_under_test, 7104));
-  TEST_ASSERT_FALSE(
-      udp_socket_send_to(&socket_under_test, NULL, 7103, payload, 1));
-  TEST_ASSERT_FALSE(
-      udp_socket_send_to(&socket_under_test, "127.0.0.1", 7103, NULL, 1));
-  TEST_ASSERT_FALSE(
-      udp_socket_send_to(&socket_under_test, "not-an-ip", 7103, payload, 1));
+  TEST_ASSERT_FALSE(udp_socket_send_to(&socket_under_test, NULL, 7103, payload, 1));
+  TEST_ASSERT_FALSE(udp_socket_send_to(&socket_under_test, "127.0.0.1", 7103, NULL, 1));
+  TEST_ASSERT_FALSE(udp_socket_send_to(&socket_under_test, "not-an-ip", 7103, payload, 1));
 
   udp_socket_close(&socket_under_test);
 }
 
-void test_udp_socket_non_blocking_receive_returns_immediately_when_no_data(
-    void) {
+void test_udp_socket_non_blocking_receive_returns_immediately_when_no_data(void)
+{
   UdpSocket receiver;
   char buffer[8] = {0};
   ULONGLONG t0;
@@ -79,8 +81,7 @@ void test_udp_socket_non_blocking_receive_returns_immediately_when_no_data(
   TEST_ASSERT_TRUE(udp_socket_set_non_blocking(&receiver, true));
 
   t0 = GetTickCount64();
-  received =
-      udp_socket_receive_from(&receiver, buffer, sizeof(buffer), NULL, 0, NULL);
+  received = udp_socket_receive_from(&receiver, buffer, sizeof(buffer), NULL, 0, NULL);
   t1 = GetTickCount64();
 
   TEST_ASSERT_EQUAL_INT(-1, received);
@@ -89,7 +90,8 @@ void test_udp_socket_non_blocking_receive_returns_immediately_when_no_data(
   udp_socket_close(&receiver);
 }
 
-void test_udp_socket_receive_timeout_expires_when_no_data(void) {
+void test_udp_socket_receive_timeout_expires_when_no_data(void)
+{
   UdpSocket receiver;
   char buffer[8] = {0};
   ULONGLONG t0;
@@ -101,8 +103,7 @@ void test_udp_socket_receive_timeout_expires_when_no_data(void) {
   TEST_ASSERT_TRUE(udp_socket_set_receive_timeout(&receiver, 120));
 
   t0 = GetTickCount64();
-  received =
-      udp_socket_receive_from(&receiver, buffer, sizeof(buffer), NULL, 0, NULL);
+  received = udp_socket_receive_from(&receiver, buffer, sizeof(buffer), NULL, 0, NULL);
   t1 = GetTickCount64();
 
   TEST_ASSERT_EQUAL_INT(-1, received);
@@ -112,7 +113,8 @@ void test_udp_socket_receive_timeout_expires_when_no_data(void) {
   udp_socket_close(&receiver);
 }
 
-void test_udp_socket_mode_configuration_fails_for_invalid_inputs(void) {
+void test_udp_socket_mode_configuration_fails_for_invalid_inputs(void)
+{
   UdpSocket receiver;
 
   TEST_ASSERT_FALSE(udp_socket_set_non_blocking(NULL, true));
@@ -122,16 +124,4 @@ void test_udp_socket_mode_configuration_fails_for_invalid_inputs(void) {
   receiver.native_socket = 0;
   TEST_ASSERT_FALSE(udp_socket_set_non_blocking(&receiver, true));
   TEST_ASSERT_FALSE(udp_socket_set_receive_timeout(&receiver, 100));
-}
-
-int main(void) {
-  UNITY_BEGIN();
-  RUN_TEST(test_udp_socket_init_and_close_succeeds);
-  RUN_TEST(test_udp_socket_send_and_receive_on_loopback);
-  RUN_TEST(test_udp_socket_send_fails_with_invalid_inputs);
-  RUN_TEST(
-      test_udp_socket_non_blocking_receive_returns_immediately_when_no_data);
-  RUN_TEST(test_udp_socket_receive_timeout_expires_when_no_data);
-  RUN_TEST(test_udp_socket_mode_configuration_fails_for_invalid_inputs);
-  return UNITY_END();
 }

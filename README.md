@@ -1,13 +1,13 @@
 # SIL
 
-Small C project with CMake, Ninja, Unity, and CMock.
+Small C project with CMake/Ninja for production builds and Ceedling (Unity + CMock) for unit tests.
 
 ## Highlights
 
 - Production app target: hello_world
-- Unit tests integrated with CTest
-- Reusable CMake helper for adding new test modules quickly
-- Clean separation of build metadata and output artifacts
+- Unit tests run through Ceedling from the test folder
+- Every test file named test_*.c is auto-discovered by Ceedling
+- Clean separation of production and test build artifacts
 
 ## Build Layout
 
@@ -15,8 +15,7 @@ Small C project with CMake, Ninja, Unity, and CMock.
 |---|---|
 | Production CMake metadata | build/meta |
 | Production artifacts | build/out |
-| Test CMake metadata | build/meta-tests |
-| Test artifacts | build/out-tests |
+| Ceedling test build artifacts | ceedling |
 
 Main executable:
 
@@ -32,7 +31,8 @@ Required:
 
 Optional (unit tests):
 
-1. Ruby in PATH (used by CMock generation)
+1. Ruby in PATH
+2. Ceedling gem installed (`gem install ceedling`)
 
 Install Ninja on Windows if needed:
 
@@ -47,7 +47,7 @@ Then restart VS Code or your terminal.
 Configure:
 
 ```powershell
-cmake -S . -B build/meta -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_PRODUCTION=ON -DBUILD_TESTING=OFF -DARTIFACTS_ROOT:PATH="$PWD/build/out"
+cmake -S . -B build/meta -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_PRODUCTION=ON -DARTIFACTS_ROOT:PATH="$PWD/build/out"
 ```
 
 Build:
@@ -71,27 +71,24 @@ cmake -E rm -rf build/out
 
 ## Quick Start (Unit Tests)
 
-Configure:
+Run all unit tests:
 
 ```powershell
-cmake -S . -B build/meta-tests -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_PRODUCTION=OFF -DBUILD_TESTING=ON -DARTIFACTS_ROOT:PATH="$PWD/build/out-tests"
-```
-
-Build:
-
-```powershell
-cmake --build build/meta-tests
-```
-
-Run tests:
-
-```powershell
-ctest --test-dir build/meta-tests --output-on-failure
+Set-Location test
+ruby -S ceedling test:all
 ```
 
 Current status:
 
-- 2/2 tests passing
+- 9/9 tests passing
+
+Clean unit test artifacts:
+
+```powershell
+Set-Location test
+ruby -S ceedling clobber
+cmake -E rm -rf ../ceedling
+```
 
 ## VS Code Tasks
 
@@ -107,12 +104,12 @@ Tip: press Ctrl+Shift+B to open the build task list.
 
 ## More Testing Details
 
-See test/README.md for module-level testing notes and the helper pattern used to add new tests.
+See test/README.md for Ceedling configuration, test discovery rules, and module test guidance.
 
 ## Troubleshooting
 
 1. If Ninja is not found, reinstall it and restart VS Code.
 2. If a build tree has stale configuration, delete its matching metadata and output folders and configure again.
-3. Keep production and test builds in separate folders to avoid BUILD_PRODUCTION and BUILD_TESTING conflicts.
+3. If Ceedling is not found, run `gem install ceedling` and reopen the terminal.
 
 

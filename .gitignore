@@ -1,4 +1,5 @@
 build/
+ceedling/
 cmake-build-*/
 
 CMakeFiles/

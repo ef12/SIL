@@ -1,6 +1,0 @@
-:cmock:
-  :plugins: []
-  :verbosity: 2
-  :when_no_prototypes: :warn
-  :mock_path: "@CMAKE_CURRENT_BINARY_DIR@/test/generated/mocks"
-  :mock_prefix: "Mock"

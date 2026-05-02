@@ -67,10 +67,3 @@ void test_hello_output_write_line_writes_expected_message(void)
   TEST_ASSERT_TRUE_MESSAGE(read_ok, "No output was captured from hello_output_write_line");
   TEST_ASSERT_EQUAL_STRING("Hello, World!\n", output_buffer);
 }
-
-int main(void)
-{
-  UNITY_BEGIN();
-  RUN_TEST(test_hello_output_write_line_writes_expected_message);
-  return UNITY_END();
-}

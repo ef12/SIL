@@ -1,6 +1,0 @@
-:cmock:
-  :plugins: []
-  :verbosity: 2
-  :when_no_prototypes: :warn
-  :mock_path: "build/gcc/tests/generated/mocks"
-  :mock_prefix: "Mock"

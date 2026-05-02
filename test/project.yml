@@ -1,0 +1,32 @@
+---
+:project:
+  :build_root: ../ceedling
+  :test_file_prefix: test_
+  :use_mocks: TRUE
+  :use_test_preprocessor: TRUE
+  :ceedling_version: 0.31.1
+
+:paths:
+  :test:
+    - ../sw/**/test
+  :source:
+    - ../sw/**/src
+  :include:
+    - ../sw/**/inc
+
+:defines:
+  :test:
+    - TEST
+
+:libraries:
+  :test:
+    - ws2_32
+
+:cmock:
+  :mock_prefix: Mock
+  :when_no_prototypes: :warn
+
+:plugins:
+  :enabled:
+    - stdout_pretty_tests_report
+    - module_generator
