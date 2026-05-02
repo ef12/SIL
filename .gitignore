@@ -1,0 +1,15 @@
+build/
+cmake-build-*/
+
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+Makefile
+
+*.obj
+*.o
+*.exe
+*.out
+*.pdb
+*.ilk
