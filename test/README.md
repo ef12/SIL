@@ -1,84 +1,76 @@
 # Unit Testing Guide
 
-This module uses:
+This project uses:
 
-- Unity as the unit test framework
-- CMock for auto-generated mocks from C headers
-- CMake + CTest to configure, build, and run tests
+- Unity for test assertions and test runner flow
+- CMock for generated mocks from C headers
+- CMake + CTest for configure, build, and execution
 
-Current test targets:
+## Current Test Targets
 
-- `greeter_tests` in `sw/greeter/test/test_greeter.c`
-- `hello_output_tests` in `sw/hello_output/test/test_hello_output.c`
+| Target | Source File | CTest Name |
+|---|---|---|
+| greeter_tests | sw/greeter/test/test_greeter.c | greeter_unit_tests |
+| hello_output_tests | sw/hello_output/test/test_hello_output.c | hello_output_unit_tests |
 
-## Recent Setup Summary
+Latest validation:
 
-- Unit tests are now wired through a reusable CMake helper: `add_unity_cmock_test(...)`.
-- The helper centralizes mock generation, test executable creation, include directories, output layout, and `add_test(...)` registration.
-- This keeps new test onboarding simple: add a new test source file and one helper call in `CMakeLists.txt`.
-- Test/production artifacts are separated from build metadata via `ARTIFACTS_ROOT`.
+- 2/2 tests passed with ctest
 
-Most recent validation run:
+## Test Build Layout
 
-- Configure/build/test command completed successfully with Ninja.
-- `ctest` result: `1/1 tests passed` (`greeter_unit_tests`).
+| Purpose | Path |
+|---|---|
+| Test CMake metadata | build/meta-tests |
+| Test artifacts | build/out-tests |
+| Generated mocks | build/meta-tests/test/generated/mocks |
 
-## Adding a New Unit Test File
+## Commands
 
-1. Create a new test file under `sw/<module>/test/`.
-2. Add one `add_unity_cmock_test(...)` call in `CMakeLists.txt` with:
-	- `TARGET` unique executable name
-	- `TEST_FILE` path to your new test file
-	- `TEST_NAME` ctest name
-	- `OUTPUT_PATH` artifact folder under `sw/`
-	- `SOURCES` production `.c` files under test
-	- `INCLUDE_DIRS` module include paths
-	- `MOCK_HEADERS` headers to mock with CMock
-3. Reconfigure and build tests, then run `ctest`.
+Run from repository root.
 
-## Terminal Commands
-
-Run from project root.
-
-Configure production build tree (Ninja + split output):
-
-```powershell
-cmake -S . -B build/meta-prod -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_PRODUCTION=ON -DBUILD_TESTING=OFF -DARTIFACTS_ROOT:PATH="$PWD/build/out-prod"
-```
-
-Build production binaries:
-
-```powershell
-cmake --build build/meta-prod
-```
-
-Run production app:
-
-```powershell
-.\build\out-prod\sw\app\bin\hello_world.exe
-```
-
-Configure test build tree (Ninja + split output):
+Configure tests:
 
 ```powershell
 cmake -S . -B build/meta-tests -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_PRODUCTION=OFF -DBUILD_TESTING=ON -DARTIFACTS_ROOT:PATH="$PWD/build/out-tests"
 ```
 
-Build unit tests:
+Build tests:
 
 ```powershell
 cmake --build build/meta-tests
 ```
 
-Run unit tests:
+Run tests:
 
 ```powershell
 ctest --test-dir build/meta-tests --output-on-failure
 ```
 
-Clean test outputs:
+Clean tests:
 
 ```powershell
 cmake --build build/meta-tests --target clean
 cmake -E rm -rf build/meta-tests build/out-tests
 ```
+
+## Add a New Unit Test Module
+
+1. Create a new test file in sw/<module>/test.
+2. Register it in CMakeLists.txt using add_unity_cmock_test(...).
+3. Fill these arguments in the helper call:
+
+- TARGET: unique executable target name
+- TEST_FILE: new test source file
+- TEST_NAME: ctest-visible test name
+- OUTPUT_PATH: relative module output path under sw/
+- SOURCES: production source files under test
+- INCLUDE_DIRS: include directories needed by the test
+- MOCK_HEADERS: headers to mock with CMock (optional)
+
+4. Reconfigure, build, and run ctest.
+
+## Notes
+
+- The helper add_unity_cmock_test(...) centralizes executable creation, include wiring, output layout, and add_test registration.
+- Generated mocks are managed through test/generate_mock.rb and test/cmock.yml.in.
