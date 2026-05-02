@@ -4,6 +4,10 @@
 
 #include <string.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 void setUp(void) {}
 
 void tearDown(void) {}
@@ -63,10 +67,71 @@ void test_udp_socket_send_fails_with_invalid_inputs(void) {
   udp_socket_close(&socket_under_test);
 }
 
+void test_udp_socket_non_blocking_receive_returns_immediately_when_no_data(
+    void) {
+  UdpSocket receiver;
+  char buffer[8] = {0};
+  ULONGLONG t0;
+  ULONGLONG t1;
+  int received;
+
+  TEST_ASSERT_TRUE(udp_socket_init(&receiver, 7105));
+  TEST_ASSERT_TRUE(udp_socket_set_non_blocking(&receiver, true));
+
+  t0 = GetTickCount64();
+  received =
+      udp_socket_receive_from(&receiver, buffer, sizeof(buffer), NULL, 0, NULL);
+  t1 = GetTickCount64();
+
+  TEST_ASSERT_EQUAL_INT(-1, received);
+  TEST_ASSERT_TRUE((t1 - t0) < 100ULL);
+
+  udp_socket_close(&receiver);
+}
+
+void test_udp_socket_receive_timeout_expires_when_no_data(void) {
+  UdpSocket receiver;
+  char buffer[8] = {0};
+  ULONGLONG t0;
+  ULONGLONG t1;
+  int received;
+
+  TEST_ASSERT_TRUE(udp_socket_init(&receiver, 7106));
+  TEST_ASSERT_TRUE(udp_socket_set_non_blocking(&receiver, false));
+  TEST_ASSERT_TRUE(udp_socket_set_receive_timeout(&receiver, 120));
+
+  t0 = GetTickCount64();
+  received =
+      udp_socket_receive_from(&receiver, buffer, sizeof(buffer), NULL, 0, NULL);
+  t1 = GetTickCount64();
+
+  TEST_ASSERT_EQUAL_INT(-1, received);
+  TEST_ASSERT_TRUE((t1 - t0) >= 80ULL);
+  TEST_ASSERT_TRUE((t1 - t0) < 1000ULL);
+
+  udp_socket_close(&receiver);
+}
+
+void test_udp_socket_mode_configuration_fails_for_invalid_inputs(void) {
+  UdpSocket receiver;
+
+  TEST_ASSERT_FALSE(udp_socket_set_non_blocking(NULL, true));
+  TEST_ASSERT_FALSE(udp_socket_set_receive_timeout(NULL, 100));
+
+  receiver.initialized = false;
+  receiver.native_socket = 0;
+  TEST_ASSERT_FALSE(udp_socket_set_non_blocking(&receiver, true));
+  TEST_ASSERT_FALSE(udp_socket_set_receive_timeout(&receiver, 100));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_udp_socket_init_and_close_succeeds);
   RUN_TEST(test_udp_socket_send_and_receive_on_loopback);
   RUN_TEST(test_udp_socket_send_fails_with_invalid_inputs);
+  RUN_TEST(
+      test_udp_socket_non_blocking_receive_returns_immediately_when_no_data);
+  RUN_TEST(test_udp_socket_receive_timeout_expires_when_no_data);
+  RUN_TEST(test_udp_socket_mode_configuration_fails_for_invalid_inputs);
   return UNITY_END();
 }

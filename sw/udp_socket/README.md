@@ -11,6 +11,8 @@ This module provides:
 
 - UDP socket initialization with local port binding
 - UDP datagram send to remote IPv4 endpoint
+- Optional non-blocking receive mode
+- Configurable receive timeout for blocking mode
 - UDP datagram receive with sender metadata (IP and port)
 - Socket shutdown and resource cleanup
 
@@ -18,7 +20,7 @@ This module does not provide:
 
 - CAN frame encoding/decoding
 - Arbitration logic
-- Retry, timeout, or reliability guarantees
+- Reliability guarantees (UDP semantics apply)
 - Broadcast routing policies
 
 ## 3. Design Goals
@@ -51,6 +53,10 @@ bool udp_socket_init(UdpSocket *udp, uint16_t local_port);
 bool udp_socket_send_to(const UdpSocket *udp, const char *ip, uint16_t remote_port,
                         const void *data, size_t data_len);
 
+bool udp_socket_set_non_blocking(UdpSocket *udp, bool enabled);
+
+bool udp_socket_set_receive_timeout(UdpSocket *udp, uint32_t timeout_ms);
+
 int udp_socket_receive_from(UdpSocket *udp, void *buffer, size_t buffer_len,
                             char *sender_ip, size_t sender_ip_len,
                             uint16_t *sender_port);
@@ -78,7 +84,18 @@ void udp_socket_close(UdpSocket *udp);
 - On success, return value is received byte count
 - If provided, sender_ip and sender_port shall be populated with source endpoint
 
-### 6.4 Shutdown
+### 6.4 Non-Blocking Mode
+
+- udp_socket_set_non_blocking shall return false for NULL or non-initialized socket
+- When enabled, receive operations shall return immediately if no datagram is available
+
+### 6.5 Receive Timeout
+
+- udp_socket_set_receive_timeout shall return false for NULL or non-initialized socket
+- Timeout value is configured in milliseconds
+- In blocking mode, receive shall return -1 after timeout if no datagram arrives
+
+### 6.6 Shutdown
 
 - udp_socket_close shall be safe to call on NULL or non-initialized socket
 - On close, initialized shall be reset to false
@@ -173,6 +190,67 @@ int main() {
 }
 ```
 
+### 10.3 C Example: Non-Blocking Poll
+
+```c
+#include "udp_socket.h"
+
+int main(void) {
+  UdpSocket rx;
+  char data[64];
+
+  if (!udp_socket_init(&rx, 7401)) {
+    return 1;
+  }
+
+  if (!udp_socket_set_non_blocking(&rx, true)) {
+    udp_socket_close(&rx);
+    return 1;
+  }
+
+  int n = udp_socket_receive_from(&rx, data, sizeof(data), NULL, 0, NULL);
+  if (n < 0) {
+    /* No packet available yet (or error). */
+  }
+
+  udp_socket_close(&rx);
+  return 0;
+}
+```
+
+### 10.4 C Example: Blocking Receive with Timeout
+
+```c
+#include "udp_socket.h"
+
+int main(void) {
+  UdpSocket rx;
+  char data[64];
+
+  if (!udp_socket_init(&rx, 7402)) {
+    return 1;
+  }
+
+  if (!udp_socket_set_non_blocking(&rx, false)) {
+    udp_socket_close(&rx);
+    return 1;
+  }
+
+  if (!udp_socket_set_receive_timeout(&rx, 200)) {
+    udp_socket_close(&rx);
+    return 1;
+  }
+
+  int n = udp_socket_receive_from(&rx, data, sizeof(data), NULL, 0, NULL);
+  if (n < 0) {
+    /* Timed out waiting for data. */
+  }
+
+  udp_socket_close(&rx);
+  return 0;
+}
+```
+
 ## 11. Verification
 
 The module is verified by unit tests in:
@@ -184,10 +262,11 @@ Current tests cover:
 - Initialization and close lifecycle
 - Loopback send/receive behavior
 - Invalid input handling
+- Non-blocking receive behavior
+- Receive timeout behavior
 
 ## 12. Future Extensions
 
-- Non-blocking mode and receive timeouts
 - Broadcast/multicast support where needed
 - Cross-platform POSIX implementation path
 - Optional error-code query API for diagnostics
