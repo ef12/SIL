@@ -1,4 +1,11 @@
 {
     "cmake.configureOnOpen": false,
-    "cmake.buildDirectory": "${workspaceFolder}/build"
+    "cmake.generator": "Ninja",
+    "cmake.buildDirectory": "${workspaceFolder}/build/meta",
+    "cmake.configureSettings": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_PRODUCTION": "ON",
+        "BUILD_TESTING": "OFF",
+        "ARTIFACTS_ROOT": "${workspaceFolder}/build/out"
+    }
 }

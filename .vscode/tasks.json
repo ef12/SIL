@@ -2,31 +2,27 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "CMake: Configure",
+            "label": "Configure",
             "type": "shell",
-            "command": "cmake",
-            "args": [
-                "-S",
-                ".",
-                "-B",
-                "build"
-            ],
+            "command": "cmake -S . -B build/meta -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_PRODUCTION=ON -DBUILD_TESTING=OFF -DARTIFACTS_ROOT:PATH=\"$PWD/build/out\"",
             "options": {
-                "cwd": "${workspaceFolder}"
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "PATH": "${env:PATH};${env:LOCALAPPDATA}\\Microsoft\\WinGet\\Packages\\Ninja-build.Ninja_Microsoft.Winget.Source_8wekyb3d8bbwe"
+                }
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
             },
             "group": "build",
             "problemMatcher": []
         },
         {
-            "label": "CMake: Build",
+            "label": "Build",
             "type": "shell",
-            "command": "cmake",
-            "args": [
-                "--build",
-                "build",
-                "--config",
-                "Debug"
-            ],
+            "command": "cmake --build build/meta",
             "options": {
                 "cwd": "${workspaceFolder}"
             },
@@ -34,36 +30,64 @@
                 "kind": "build",
                 "isDefault": false
             },
-            "dependsOn": "CMake: Configure",
+            "dependsOn": "Configure",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
             "problemMatcher": [
-                "$msCompile"
+                "$gcc"
             ]
         },
         {
-            "label": "CMake: Clean",
+            "label": "Clean",
             "type": "shell",
-            "command": "cmake",
-            "args": [
-                "--build",
-                "build",
-                "--target",
-                "clean",
-                "--config",
-                "Debug"
-            ],
+            "command": "if (Test-Path build/meta) { cmake --build build/meta --target clean }; cmake -E rm -rf build/out; cmake -E rm -rf build/meta/build",
             "options": {
                 "cwd": "${workspaceFolder}"
             },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "group": "build",
             "problemMatcher": []
         },
         {
-            "label": "CMake: Run",
+            "label": "Run Tests",
             "type": "shell",
-            "command": "${workspaceFolder}/build/Debug/hello_world.exe",
+            "command": "cmake -S . -B build/meta-tests -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_PRODUCTION=OFF -DBUILD_TESTING=ON -DARTIFACTS_ROOT:PATH=\"$PWD/build/out-tests\"; cmake --build build/meta-tests; ctest --test-dir build/meta-tests --output-on-failure",
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "PATH": "${env:PATH};${env:LOCALAPPDATA}\\Microsoft\\WinGet\\Packages\\Ninja-build.Ninja_Microsoft.Winget.Source_8wekyb3d8bbwe"
+                }
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "group": "build",
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Clean Tests",
+            "type": "shell",
+            "command": "if (Test-Path build/meta-tests) { cmake --build build/meta-tests --target clean }; cmake -E rm -rf build/out-tests; cmake -E rm -rf build/meta-tests/build",
             "options": {
                 "cwd": "${workspaceFolder}"
             },
-            "dependsOn": "CMake: Build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "group": "build",
             "problemMatcher": []
         }
     ]

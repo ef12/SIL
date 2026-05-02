@@ -5,13 +5,13 @@
             "name": "Debug hello_world",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/hello_world.exe",
+            "program": "${workspaceFolder}/build/out/sw/app/bin/hello_world.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
             "console": "integratedTerminal",
-            "preLaunchTask": "CMake: Build"
+            "preLaunchTask": "Build"
         }
     ]
 }
