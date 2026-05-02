@@ -2,4 +2,7 @@
 
 #include <stdio.h>
 
-void hello_output_write_line(const char *message) { puts(message); }
+void hello_output_write_line(const char *message)
+{
+  puts(message);
+}

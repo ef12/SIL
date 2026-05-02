@@ -90,6 +90,6 @@ void udp_socket_close(UdpSocket *udp);
 
 #ifdef __cplusplus
 }
-#endif 
+#endif
 
-#endif   /* UDP_SOCKET_H */
+#endif /* UDP_SOCKET_H */
