@@ -12,6 +12,12 @@ set(ARTIFACTS_ROOT "${CMAKE_SOURCE_DIR}/build/out" CACHE PATH "Output directory 
 set(SW_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/sw)
 set(GREETER_ROOT ${SW_ROOT}/greeter)
 set(HELLO_OUTPUT_ROOT ${SW_ROOT}/hello_output)
+set(UDP_SOCKET_ROOT ${SW_ROOT}/udp_socket)
+
+set(UDP_SOCKET_PLATFORM_LIBS)
+if(WIN32)
+    list(APPEND UDP_SOCKET_PLATFORM_LIBS ws2_32)
+endif()
 
 include(CTest)
 include(FetchContent)
@@ -35,6 +41,20 @@ function(set_module_output_layout target module_rel_path)
 endfunction()
 
 if(BUILD_PRODUCTION)
+    add_library(udp_socket_lib
+        sw/udp_socket/src/udp_socket.c
+    )
+
+    target_include_directories(udp_socket_lib
+        PUBLIC
+            ${UDP_SOCKET_ROOT}/inc
+    )
+    target_link_libraries(udp_socket_lib
+        PUBLIC
+            ${UDP_SOCKET_PLATFORM_LIBS}
+    )
+    set_module_output_layout(udp_socket_lib "udp_socket")
+
     add_library(hello_output_lib
         sw/hello_output/src/hello_output.c
     )
@@ -136,7 +156,7 @@ if(BUILD_TESTING)
     function(add_unity_cmock_test)
         set(options)
         set(oneValueArgs TARGET TEST_FILE TEST_NAME OUTPUT_PATH)
-        set(multiValueArgs SOURCES INCLUDE_DIRS MOCK_HEADERS)
+        set(multiValueArgs SOURCES INCLUDE_DIRS MOCK_HEADERS LINK_LIBS)
         cmake_parse_arguments(AUCT "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
         if(NOT AUCT_TARGET OR NOT AUCT_TEST_FILE OR NOT AUCT_TEST_NAME OR NOT AUCT_OUTPUT_PATH)
@@ -165,6 +185,13 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_BINARY_DIR}/test/generated/mocks
         )
 
+        if(AUCT_LINK_LIBS)
+            target_link_libraries(${AUCT_TARGET}
+                PRIVATE
+                    ${AUCT_LINK_LIBS}
+            )
+        endif()
+
         set_module_output_layout(${AUCT_TARGET} ${AUCT_OUTPUT_PATH})
 
         add_test(
@@ -190,5 +217,15 @@ if(BUILD_TESTING)
         OUTPUT_PATH hello_output/test
         SOURCES sw/hello_output/src/hello_output.c
         INCLUDE_DIRS ${HELLO_OUTPUT_ROOT}/inc
+    )
+
+    add_unity_cmock_test(
+        TARGET udp_socket_tests
+        TEST_FILE sw/udp_socket/test/test_udp_socket.c
+        TEST_NAME udp_socket_unit_tests
+        OUTPUT_PATH udp_socket/test
+        SOURCES sw/udp_socket/src/udp_socket.c
+        INCLUDE_DIRS ${UDP_SOCKET_ROOT}/inc
+        LINK_LIBS ${UDP_SOCKET_PLATFORM_LIBS}
     )
 endif()
