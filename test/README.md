@@ -10,13 +10,11 @@ This project uses:
 
 | Test File | Module |
 |---|---|
-| sw/greeter/test/test_greeter.c | greeter |
-| sw/hello_output/test/test_hello_output.c | hello_output |
 | sw/udp_socket/test/test_udp_socket.c | udp_socket |
 
 Latest validation:
 
-- 9/9 tests passed with Ceedling
+- 6/6 tests passed with Ceedling
 
 ## Test Build Layout
 
