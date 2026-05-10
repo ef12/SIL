@@ -5,7 +5,7 @@ Small C project with CMake/Ninja for production builds and Ceedling (Unity + CMo
 ## Highlights
 
 - Production app target: hello_world
-- Core transport module: udp_socket
+- Core modules: udp_socket, can_frame, can_emulator, can_driver, can_transport_udp, io, io_transport_udp
 - Unit tests run through Ceedling from the test folder
 - Every test file named test_*.c is auto-discovered by Ceedling
 - Clean separation of production and test build artifacts
@@ -20,7 +20,7 @@ Small C project with CMake/Ninja for production builds and Ceedling (Unity + CMo
 
 Main executable:
 
-- build/out/sw/app/bin/hello_world.exe
+- build/out/sw/apps/bin/hello_world.exe
 
 ## Prerequisites
 
@@ -60,7 +60,7 @@ cmake --build build/meta
 Run:
 
 ```powershell
-.\build\out\sw\app\bin\hello_world.exe
+.\build\out\sw\apps\bin\hello_world.exe
 ```
 
 Clean:
@@ -81,7 +81,7 @@ ruby -S ceedling test:all
 
 Current status:
 
-- 6/6 tests passing
+- 31/31 tests passing
 
 Clean unit test artifacts:
 

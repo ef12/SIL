@@ -10,11 +10,17 @@ This project uses:
 
 | Test File | Module |
 |---|---|
-| sw/udp_socket/test/test_udp_socket.c | udp_socket |
+| sw/drivers/io/test/test_io.c | io |
+| sw/drivers/io/io_transport_udp/test/test_io_transport_udp.c | io_transport_udp |
+| sw/drivers/comms/can_driver/can_transport_udp/test/test_can_transport_udp.c | can_transport_udp |
+| sw/drivers/comms/can_driver/can_frame/test/test_can_frame.c | can_frame |
+| sw/drivers/comms/can_driver/test/test_can_driver.c | can_driver |
+| sw/drivers/comms/can_driver/can_emulator/test/test_can_emulator.c | can_emulator |
+| sw/drivers/comms/udp_socket/test/test_udp_socket.c | udp_socket |
 
 Latest validation:
 
-- 6/6 tests passed with Ceedling
+- 31/31 tests passed with Ceedling
 
 ## Test Build Layout
 
@@ -49,7 +55,7 @@ cmake -E rm -rf ../ceedling
 
 ## Add a New Unit Test Module
 
-1. Create a new test file in sw/<module>/test.
+1. Create a new test file in the corresponding module path under sw/drivers/<domain>/<module>/test.
 2. Add test functions named `test_<behavior>(void)`.
 3. Include mocks with `#include "Mock<module>.h"` when required.
 4. Run `ruby -S ceedling test:all` from the `test` folder.

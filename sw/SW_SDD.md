@@ -312,7 +312,7 @@ test/
 
 Current baseline:
 
-- Implemented: `udp_socket`
+- Implemented: `udp_socket`, `can_frame`, `can_emulator`, `can_driver`, `can_transport_udp`, `io`, `io_transport_udp`
 - Planned: all other platform modules listed above
 
 ## 11. Component SDD Plan

@@ -34,13 +34,13 @@ This module does not provide:
 
 | File | Role |
 |---|---|
-| sw/udp_socket/inc/udp_socket.h | Public API |
-| sw/udp_socket/src/udp_socket.c | Implementation |
-| sw/udp_socket/test/test_udp_socket.c | Unit tests |
+| sw/drivers/comms/udp_socket/inc/udp_socket.h | Public API |
+| sw/drivers/comms/udp_socket/src/udp_socket.c | Implementation |
+| sw/drivers/comms/udp_socket/test/test_udp_socket.c | Unit tests |
 
 ## 5. Public API
 
-Header: sw/udp_socket/inc/udp_socket.h
+Header: sw/drivers/comms/udp_socket/inc/udp_socket.h
 
 ```c
 typedef struct {
@@ -255,13 +255,13 @@ int main(void) {
 
 The module is verified by unit tests in:
 
-- sw/udp_socket/test/test_udp_socket.c
+- sw/drivers/comms/udp_socket/test/test_udp_socket.c
 
 Run verification with:
 
 ```powershell
 Set-Location test
-ruby -S ceedling test:all
+ruby -S ceedling test:udp_socket
 ```
 
 Current tests cover:
