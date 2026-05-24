@@ -1,12 +1,18 @@
 #include "can_frame.h"
-#include "can_transport_udp.h"
-#include "udp_socket.h"
+#include "sil_config.h"
 
 #include <stdio.h>
-#include <string.h>
 
-#define MY_PORT          7402U
-#define PEER_PORT        7401U
+#ifdef _WIN32
+#include <windows.h>
+#define sleep_ms(ms) Sleep(ms)
+#else
+#include <unistd.h>
+#define sleep_ms(ms) usleep((ms) * 1000)
+#endif
+
+#define CAN_PORT         7402U
+#define CAN_PEER         7401U
 #define MY_MSG_ID        0x18FF60E5U
 #define SEND_INTERVAL_MS 2000U
 #define RX_TIMEOUT_MS    100U
@@ -19,36 +25,45 @@
 
 int main(void)
 {
-  UdpSocket socket;
-  CanTransportUdp transport;
+  /* ---- Phase 1: BSP — configure SIL peripherals ---- */
+
+  SilConfig sil = {0};
+
+  SilConfigParams sil_params = {
+      .can =
+          {
+              .local_port = CAN_PORT,
+              .remote_ip = "127.0.0.1",
+              .remote_port = CAN_PEER,
+              .timeout_ms = RX_TIMEOUT_MS,
+          },
+  };
+
+  if (!sil_config_init(&sil, &sil_params))
+  {
+    printf("[App2] Failed to init SIL peripherals\n");
+    return 1;
+  }
+
+  /* ---- Phase 2: HAL — get driver from BSP ---- */
+
+  CanDriver *can = sil_config_get_can_driver(&sil);
+
+  if (can == NULL)
+  {
+    printf("[App2] Failed to get CAN driver\n");
+    sil_config_deinit(&sil);
+    return 1;
+  }
+
+  /* ---- Phase 3: Application — CAN echo ---- */
+
   CanFrame tx_frame;
   CanFrame rx_frame;
   CanFrame echo_frame;
   uint8_t counter = 0U;
-  char sender_ip[32];
-  uint16_t sender_port = 0;
 
-  printf("[App2] Starting on port %u\n", MY_PORT);
-
-  if (!udp_socket_init(&socket, MY_PORT))
-  {
-    printf("[App2] Failed to init socket\n");
-    return 1;
-  }
-
-  if (!can_transport_udp_init(&transport, &socket, "127.0.0.1", PEER_PORT))
-  {
-    printf("[App2] Failed to init transport\n");
-    udp_socket_close(&socket);
-    return 1;
-  }
-
-  if (!udp_socket_set_receive_timeout(&socket, RX_TIMEOUT_MS))
-  {
-    printf("[App2] Failed to set receive timeout\n");
-    udp_socket_close(&socket);
-    return 1;
-  }
+  printf("[App2] Starting on port %u\n", CAN_PORT);
 
   while (1)
   {
@@ -63,29 +78,26 @@ int main(void)
     printf("[App2] TX -> ID=0x%08X DLC=%u Data=[%02X %02X %02X]\n", tx_frame.id, tx_frame.dlc,
            tx_frame.data[0], tx_frame.data[1], tx_frame.data[2]);
     (void)fflush(stdout);
-    (void)can_transport_udp_send_frame(&transport, &tx_frame);
+    (void)can_driver_send(can, &tx_frame);
 
     /* Receive loop: process incoming frames for ~SEND_INTERVAL_MS. */
     for (uint32_t i = 0U; i < RX_LOOPS; i++)
     {
-      memset(sender_ip, 0, sizeof(sender_ip));
-      if (can_transport_udp_receive_frame(&transport, &rx_frame, sender_ip, sizeof(sender_ip),
-                                          &sender_port))
+      if (can_driver_receive(can, &rx_frame))
       {
-        printf("[App2] RX <- ID=0x%08X DLC=%u Data=[%02X %02X %02X] from %s:%u\n", rx_frame.id,
-               rx_frame.dlc, rx_frame.data[0], rx_frame.data[1], rx_frame.data[2], sender_ip,
-               sender_port);
+        printf("[App2] RX <- ID=0x%08X DLC=%u Data=[%02X %02X %02X]\n", rx_frame.id, rx_frame.dlc,
+               rx_frame.data[0], rx_frame.data[1], rx_frame.data[2]);
         (void)fflush(stdout);
 
         if (!IS_ECHO(rx_frame.id))
         {
           /* Echo the original message back. */
-          echo_frame = rx_frame;
+          can_frame_copy(&echo_frame, &rx_frame);
           echo_frame.id = MAKE_ECHO_ID(rx_frame.id);
           printf("[App2] ECHO -> ID=0x%08X DLC=%u Data=[%02X %02X %02X]\n", echo_frame.id,
                  echo_frame.dlc, echo_frame.data[0], echo_frame.data[1], echo_frame.data[2]);
           (void)fflush(stdout);
-          (void)can_transport_udp_send_frame(&transport, &echo_frame);
+          (void)can_driver_send(can, &echo_frame);
         }
       }
     }
@@ -93,6 +105,7 @@ int main(void)
     counter++;
   }
 
-  udp_socket_close(&socket);
+  can_driver_close(can);
+  sil_config_deinit(&sil);
   return 0;
 }
