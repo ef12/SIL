@@ -26,7 +26,7 @@ typedef struct
   uint16_t local_port;
   const char *remote_ip;
   uint16_t remote_port;
-  uint32_t timeout_ms;
+  uint32_t sync_interval_ms;
   size_t digital_pin_count;
   size_t analog_pin_count;
 } SilIoConfigParams;

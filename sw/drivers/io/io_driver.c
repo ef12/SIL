@@ -5,26 +5,6 @@
 
 #include "io_driver.h"
 
-bool io_driver_sync_inputs(IoDriver *driver)
-{
-  if (driver == NULL || !driver->initialized || driver->sync_inputs == NULL)
-  {
-    return false;
-  }
-
-  return driver->sync_inputs(driver);
-}
-
-bool io_driver_sync_outputs(const IoDriver *driver)
-{
-  if (driver == NULL || !driver->initialized || driver->sync_outputs == NULL)
-  {
-    return false;
-  }
-
-  return driver->sync_outputs(driver);
-}
-
 bool io_driver_digital_read(const IoDriver *driver, uint16_t pin, bool *value)
 {
   if (driver == NULL || !driver->initialized || driver->digital_read == NULL)

@@ -12,12 +12,15 @@
 #define sleep_ms(ms) usleep((ms) * 1000)
 #endif
 
-#define IO_PORT      7501U
-#define IO_PEER_PORT 7502U
-#define CAN_PORT     7401U
-#define CAN_PEER     7402U
-#define LOOP_MS      100U
-#define LOOP_DT      0.1f
+#define IO_PORT         7501U
+#define IO_PEER_PORT    7502U
+#define IO_SYNC_RATE_MS 10U
+
+#define CAN_PORT 7401U
+#define CAN_PEER 7402U
+
+#define LOOP_MS 100U
+#define LOOP_DT 0.1f
 
 int main(void)
 {
@@ -30,7 +33,7 @@ int main(void)
       .local_port = IO_PORT,
       .remote_ip = "127.0.0.1",
       .remote_port = IO_PEER_PORT,
-      .timeout_ms = LOOP_MS,
+      .sync_interval_ms = IO_SYNC_RATE_MS,
       .digital_pin_count = 1U,
       .analog_pin_count = 2U,
   };
@@ -78,7 +81,7 @@ int main(void)
       .output_pin = 1U,
       .setpoint = 32768U,
       .kp = 1.0f,
-      .ki = 0.5f,
+      .ki = 0.05f,
       .output_min = 0.0f,
       .output_max = 65535.0f,
       .status_can_id = 0x18FF50E5U,
@@ -99,16 +102,10 @@ int main(void)
 
   while (1)
   {
-    (void)io_driver_sync_inputs(io);
     fan_controller_update(&fan, LOOP_DT);
-    (void)io_driver_sync_outputs(io);
 
     (void)fan_controller_send_status(&fan);
     (void)fan_controller_receive_commands(&fan);
-
-    printf("[FanCtrl] EN=%d SP=%5u FB=%5u OUT=%5u\n", fan.enabled, fan.setpoint, fan.feedback,
-           fan.output);
-    (void)fflush(stdout);
 
     sleep_ms(LOOP_MS);
   }

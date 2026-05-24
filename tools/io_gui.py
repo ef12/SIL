@@ -218,6 +218,12 @@ class IoGui:
     def _poll(self) -> None:
         rx_dig, rx_ana = self.bridge.get_rx()
 
+        # Preserve app-owned (monitor-only) pins in our TX buffer so we
+        # don't overwrite them with 0 on the next send.
+        for pin in ANALOG_MONITOR_PINS:
+            if pin < len(rx_ana):
+                self.bridge.tx_analog[pin] = rx_ana[pin]
+
         for i, label in enumerate(self.monitor_digital_labels):
             if i < len(rx_dig):
                 label.config(text="ON" if rx_dig[i] else "OFF")

@@ -30,8 +30,6 @@ typedef struct IoDriver IoDriver;
  */
 struct IoDriver
 {
-  bool (*sync_inputs)(IoDriver *self);
-  bool (*sync_outputs)(const IoDriver *self);
   bool (*digital_read)(const IoDriver *self, uint16_t pin, bool *value);
   bool (*digital_write)(IoDriver *self, uint16_t pin, bool value);
   bool (*analog_read)(const IoDriver *self, uint16_t pin, uint16_t *value);
@@ -42,8 +40,6 @@ struct IoDriver
   bool initialized;
 };
 
-bool io_driver_sync_inputs(IoDriver *driver);
-bool io_driver_sync_outputs(const IoDriver *driver);
 bool io_driver_digital_read(const IoDriver *driver, uint16_t pin, bool *value);
 bool io_driver_digital_write(IoDriver *driver, uint16_t pin, bool value);
 bool io_driver_analog_read(const IoDriver *driver, uint16_t pin, uint16_t *value);

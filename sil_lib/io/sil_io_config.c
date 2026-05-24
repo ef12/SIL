@@ -6,6 +6,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <pthread.h>
+#include <unistd.h>
+#endif
+
 /* ================================================================
  *  SIL IO driver — extends IoDriver with transport pointer.
  * ================================================================ */
@@ -24,16 +31,6 @@ static SilIoDriver *io_to_sil(IoDriver *self)
 static const SilIoDriver *io_to_sil_const(const IoDriver *self)
 {
   return (const SilIoDriver *)self;
-}
-
-static bool sil_io_sync_inputs(IoDriver *self)
-{
-  return io_transport_udp_receive(io_to_sil(self)->transport, NULL, 0U, NULL);
-}
-
-static bool sil_io_sync_outputs(const IoDriver *self)
-{
-  return io_transport_udp_send(io_to_sil_const(self)->transport);
 }
 
 static bool sil_io_digital_read(const IoDriver *self, uint16_t pin, bool *value)
@@ -67,6 +64,13 @@ typedef struct
   bool *digital_buf;
   uint16_t *analog_buf;
   SilIoDriver driver;
+  volatile bool running;
+  uint32_t sync_interval_ms;
+#ifdef _WIN32
+  HANDLE thread;
+#else
+  pthread_t thread;
+#endif
 } SilIoInternal;
 
 static void cleanup(SilIoInternal *si)
@@ -76,10 +80,49 @@ static void cleanup(SilIoInternal *si)
     return;
   }
 
+  si->running = false;
+
+#ifdef _WIN32
+  if (si->thread != NULL)
+  {
+    WaitForSingleObject(si->thread, INFINITE);
+    CloseHandle(si->thread);
+  }
+#else
+  pthread_join(si->thread, NULL);
+#endif
+
   udp_socket_close(&si->socket);
   free(si->digital_buf);
   free(si->analog_buf);
   free(si);
+}
+
+#ifdef _WIN32
+static DWORD WINAPI sync_thread(LPVOID arg)
+#else
+static void *sync_thread(void *arg)
+#endif
+{
+  SilIoInternal *si = (SilIoInternal *)arg;
+
+  while (si->running)
+  {
+    (void)io_transport_udp_receive(&si->transport, NULL, 0U, NULL);
+    (void)io_transport_udp_send(&si->transport);
+
+#ifdef _WIN32
+    Sleep(si->sync_interval_ms);
+#else
+    usleep((useconds_t)si->sync_interval_ms * 1000U);
+#endif
+  }
+
+#ifdef _WIN32
+  return 0;
+#else
+  return NULL;
+#endif
 }
 
 bool sil_io_config_init(SilIoConfig *sil, const SilIoConfigParams *params)
@@ -118,7 +161,7 @@ bool sil_io_config_init(SilIoConfig *sil, const SilIoConfigParams *params)
     }
   }
 
-  if (!sil_config_udp_socket_init(&si->socket, params->local_port, params->timeout_ms))
+  if (!sil_config_udp_socket_init(&si->socket, params->local_port, 1U))
   {
     free(si->digital_buf);
     free(si->analog_buf);
@@ -135,8 +178,6 @@ bool sil_io_config_init(SilIoConfig *sil, const SilIoConfigParams *params)
   }
 
   /* Wire up the SIL IO driver. */
-  si->driver.base.sync_inputs = sil_io_sync_inputs;
-  si->driver.base.sync_outputs = sil_io_sync_outputs;
   si->driver.base.digital_read = sil_io_digital_read;
   si->driver.base.digital_write = sil_io_digital_write;
   si->driver.base.analog_read = sil_io_analog_read;
@@ -146,6 +187,25 @@ bool sil_io_config_init(SilIoConfig *sil, const SilIoConfigParams *params)
   si->driver.base.analog_pin_count = params->analog_pin_count;
   si->driver.base.initialized = true;
   si->driver.transport = &si->transport;
+
+  /* Start sync thread. */
+  si->sync_interval_ms = params->sync_interval_ms;
+  si->running = true;
+
+#ifdef _WIN32
+  si->thread = CreateThread(NULL, 0, sync_thread, si, 0, NULL);
+  if (si->thread == NULL)
+  {
+    cleanup(si);
+    return false;
+  }
+#else
+  if (pthread_create(&si->thread, NULL, sync_thread, si) != 0)
+  {
+    cleanup(si);
+    return false;
+  }
+#endif
 
   sil->internal = si;
   sil->initialized = true;
