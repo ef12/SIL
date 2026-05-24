@@ -296,13 +296,16 @@ Automation expectations:
 
 ```text
 sw/
-  app_implement/
-  can_driver/
-  can_emulator/
-  can_frame/
-  isobus_services/
-  can_transport_udp/
-  udp_socket/
+  apps/
+    app_implement/
+  drivers/
+    can_driver/
+      can_frame/
+    io/
+  modules/
+    isobus_services/
+  sil_lib/
+    vcan/
 tools/
   vt_simulator_cpp/
   gui_python/
@@ -312,7 +315,7 @@ test/
 
 Current baseline:
 
-- Implemented: `udp_socket`, `can_frame`, `can_emulator`, `can_driver`, `can_transport_udp`, `io`, `io_transport_udp`
+- Implemented: `can_frame`, `can_driver`
 - Planned: all other platform modules listed above
 
 ## 11. Component SDD Plan

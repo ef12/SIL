@@ -9,10 +9,13 @@
 :paths:
   :test:
     - ../sw/**/test
+    - ../sil_lib/**/test
   :source:
-    - ../sw/**/src
+    - ../sw/**
+    - ../sil_lib/**
   :include:
-    - ../sw/**/inc
+    - ../sw/**
+    - ../sil_lib/**
 
 :defines:
   :test:

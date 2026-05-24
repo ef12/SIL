@@ -84,6 +84,54 @@
             },
             "group": "build",
             "problemMatcher": []
+        },
+        {
+            "label": "Build Apps",
+            "type": "shell",
+            "command": "cmake --build build/meta --target can_app1 --target can_app2",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOn": "Configure",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Run App2",
+            "type": "shell",
+            "command": ".\\build\\out\\sw\\apps\\can_app2\\bin\\can_app2.exe",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOn": "Build Apps",
+            "isBackground": true,
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Run App1",
+            "type": "shell",
+            "command": ".\\build\\out\\sw\\apps\\can_app1\\bin\\can_app1.exe",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOn": "Build Apps",
+            "isBackground": true,
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
         }
     ]
 }
