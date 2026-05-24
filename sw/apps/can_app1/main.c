@@ -1,5 +1,6 @@
 #include "fan_controller.h"
-#include "sil_config.h"
+#include "sil_io_config.h"
+#include "sil_vcan_config.h"
 
 #include <stdio.h>
 
@@ -22,42 +23,48 @@ int main(void)
 {
   /* ---- Phase 1: BSP — configure SIL peripherals ---- */
 
-  SilConfig sil = {0};
+  SilIoConfig sil_io = {0};
+  SilVcanConfig sil_can = {0};
 
-  SilConfigParams sil_params = {
-      .io =
-          {
-              .local_port = IO_PORT,
-              .remote_ip = "127.0.0.1",
-              .remote_port = IO_PEER_PORT,
-              .timeout_ms = LOOP_MS,
-              .digital_pin_count = 1U,
-              .analog_pin_count = 2U,
-          },
-      .can =
-          {
-              .local_port = CAN_PORT,
-              .remote_ip = "127.0.0.1",
-              .remote_port = CAN_PEER,
-              .timeout_ms = 1U, /* non-blocking poll */
-          },
+  SilIoConfigParams io_params = {
+      .local_port = IO_PORT,
+      .remote_ip = "127.0.0.1",
+      .remote_port = IO_PEER_PORT,
+      .timeout_ms = LOOP_MS,
+      .digital_pin_count = 1U,
+      .analog_pin_count = 2U,
   };
 
-  if (!sil_config_init(&sil, &sil_params))
+  SilVcanConfigParams can_params = {
+      .local_port = CAN_PORT,
+      .remote_ip = "127.0.0.1",
+      .remote_port = CAN_PEER,
+      .timeout_ms = 1U, /* non-blocking poll */
+  };
+
+  if (!sil_io_config_init(&sil_io, &io_params))
   {
-    printf("[FanCtrl] Failed to init SIL peripherals\n");
+    printf("[FanCtrl] Failed to init SIL IO\n");
+    return 1;
+  }
+
+  if (!sil_vcan_config_init(&sil_can, &can_params))
+  {
+    printf("[FanCtrl] Failed to init SIL CAN\n");
+    sil_io_config_deinit(&sil_io);
     return 1;
   }
 
   /* ---- Phase 2: HAL — get drivers from BSP ---- */
 
-  IoDriver *io = sil_config_get_io_driver(&sil);
-  CanDriver *can = sil_config_get_can_driver(&sil);
+  IoDriver *io = sil_io_config_get_driver(&sil_io);
+  CanDriver *can = sil_vcan_config_get_driver(&sil_can);
 
   if (io == NULL || can == NULL)
   {
     printf("[FanCtrl] Failed to get drivers\n");
-    sil_config_deinit(&sil);
+    sil_vcan_config_deinit(&sil_can);
+    sil_io_config_deinit(&sil_io);
     return 1;
   }
 
@@ -81,7 +88,8 @@ int main(void)
   if (!fan_controller_init(&fan, &fan_cfg, io, can))
   {
     printf("[FanCtrl] Failed to init fan controller\n");
-    sil_config_deinit(&sil);
+    sil_vcan_config_deinit(&sil_can);
+    sil_io_config_deinit(&sil_io);
     return 1;
   }
 
@@ -107,6 +115,7 @@ int main(void)
 
   io_driver_close(io);
   can_driver_close(can);
-  sil_config_deinit(&sil);
+  sil_vcan_config_deinit(&sil_can);
+  sil_io_config_deinit(&sil_io);
   return 0;
 }

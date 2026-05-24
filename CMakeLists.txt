@@ -19,7 +19,8 @@ set(IO_TRANSPORT_UDP_ROOT ${SIL_LIB_ROOT}/io/io_transport_udp)
 set(PI_CONTROLLER_ROOT ${SW_ROOT}/modules/pi_controller)
 set(FAN_CONTROLLER_ROOT ${SW_ROOT}/modules/fan_controller)
 set(IO_DRIVER_ROOT ${SW_ROOT}/drivers/io)
-set(SIL_CONFIG_ROOT ${SIL_LIB_ROOT}/sil_config)
+set(SIL_IO_CONFIG_ROOT ${SIL_LIB_ROOT}/io)
+set(SIL_VCAN_CONFIG_ROOT ${SIL_LIB_ROOT}/vcan)
 
 set(UDP_SOCKET_PLATFORM_LIBS)
 if(WIN32)
@@ -111,22 +112,50 @@ if(BUILD_PRODUCTION)
     )
     set_module_output_layout(io_driver_lib "drivers/io")
 
-    add_library(sil_config_lib
-        sil_lib/sil_config/sil_config.c
+    add_library(sil_config_udp_socket_lib
+        sil_lib/udp_socket/sil_config_udp_socket.c
     )
-    target_include_directories(sil_config_lib
+    target_include_directories(sil_config_udp_socket_lib
         PUBLIC
-            ${SIL_CONFIG_ROOT}
+            ${UDP_SOCKET_ROOT}
     )
-    target_link_libraries(sil_config_lib
+    target_link_libraries(sil_config_udp_socket_lib
+        PUBLIC
+            udp_socket_lib
+    )
+    set_module_output_layout(sil_config_udp_socket_lib "sil_lib/udp_socket")
+
+    add_library(sil_io_config_lib
+        sil_lib/io/sil_io_config.c
+    )
+    target_include_directories(sil_io_config_lib
+        PUBLIC
+            ${SIL_IO_CONFIG_ROOT}
+    )
+    target_link_libraries(sil_io_config_lib
         PUBLIC
             io_driver_lib
-            can_driver_lib
         PRIVATE
             io_transport_udp_lib
-            can_transport_udp_lib
+            sil_config_udp_socket_lib
     )
-    set_module_output_layout(sil_config_lib "sil_lib/sil_config")
+    set_module_output_layout(sil_io_config_lib "sil_lib/io")
+
+    add_library(sil_vcan_config_lib
+        sil_lib/vcan/sil_vcan_config.c
+    )
+    target_include_directories(sil_vcan_config_lib
+        PUBLIC
+            ${SIL_VCAN_CONFIG_ROOT}
+    )
+    target_link_libraries(sil_vcan_config_lib
+        PUBLIC
+            can_driver_lib
+        PRIVATE
+            can_transport_udp_lib
+            sil_config_udp_socket_lib
+    )
+    set_module_output_layout(sil_vcan_config_lib "sil_lib/vcan")
 
     add_library(pi_controller_lib
         sw/modules/pi_controller/pi_controller.c
@@ -155,13 +184,13 @@ if(BUILD_PRODUCTION)
     add_executable(can_app1
         sw/apps/can_app1/main.c
     )
-    target_link_libraries(can_app1 PRIVATE fan_controller_lib can_driver_lib sil_config_lib)
+    target_link_libraries(can_app1 PRIVATE fan_controller_lib sil_io_config_lib sil_vcan_config_lib)
     set_module_output_layout(can_app1 "apps/can_app1")
 
     add_executable(can_app2
         sw/apps/can_app2/main.c
     )
-    target_link_libraries(can_app2 PRIVATE can_driver_lib sil_config_lib)
+    target_link_libraries(can_app2 PRIVATE can_driver_lib sil_vcan_config_lib)
     set_module_output_layout(can_app2 "apps/can_app2")
 
     add_executable(hello_world
