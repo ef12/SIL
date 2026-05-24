@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(HelloWorldC VERSION 1.0 LANGUAGES C)
+project(SIL VERSION 1.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -181,20 +181,9 @@ if(BUILD_PRODUCTION)
     )
     set_module_output_layout(fan_controller_lib "modules/fan_controller")
 
-    add_executable(can_app1
-        sw/apps/can_app1/main.c
+    add_executable(implement
+        sw/apps/implement/main.c
     )
-    target_link_libraries(can_app1 PRIVATE fan_controller_lib sil_io_config_lib sil_vcan_config_lib)
-    set_module_output_layout(can_app1 "apps/can_app1")
-
-    add_executable(can_app2
-        sw/apps/can_app2/main.c
-    )
-    target_link_libraries(can_app2 PRIVATE can_driver_lib sil_vcan_config_lib)
-    set_module_output_layout(can_app2 "apps/can_app2")
-
-    add_executable(hello_world
-        sw/apps/main.c
-    )
-    set_module_output_layout(hello_world "apps")
+    target_link_libraries(implement PRIVATE fan_controller_lib sil_io_config_lib sil_vcan_config_lib)
+    set_module_output_layout(implement "apps/implement")
 endif()

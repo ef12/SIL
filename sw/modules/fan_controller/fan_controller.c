@@ -129,6 +129,7 @@ bool fan_controller_receive_commands(FanController *fc)
   {
     uint16_t sp = (uint16_t)frame.data[0] | (uint16_t)((uint16_t)frame.data[1] << 8U);
     fan_controller_set_setpoint(fc, sp);
+    (void)fan_controller_send_status(fc);
     return true;
   }
 
