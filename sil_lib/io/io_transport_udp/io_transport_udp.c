@@ -1,3 +1,8 @@
+/**
+ * @file io_transport_udp.c
+ * @brief IO-over-UDP transport — serialization, send, and receive.
+ */
+
 #include "io_transport_udp.h"
 
 #include <limits.h>

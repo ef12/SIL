@@ -1,3 +1,8 @@
+/**
+ * @file can_frame.c
+ * @brief CAN frame validation, clearing, and copying helpers.
+ */
+
 #include "can_frame.h"
 
 #include <string.h>

@@ -1,3 +1,8 @@
+/**
+ * @file sil_vcan_config.c
+ * @brief SIL virtual CAN configuration — assembles socket, transport, emulator, and CAN driver.
+ */
+
 #include "sil_vcan_config.h"
 
 #include "can_emulator.h"

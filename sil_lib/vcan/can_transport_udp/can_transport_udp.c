@@ -1,3 +1,8 @@
+/**
+ * @file can_transport_udp.c
+ * @brief CAN-over-UDP transport — encode, decode, send, and receive.
+ */
+
 #include "can_transport_udp.h"
 
 #include <string.h>

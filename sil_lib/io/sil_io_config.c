@@ -1,3 +1,8 @@
+/**
+ * @file sil_io_config.c
+ * @brief SIL IO configuration — assembles socket, transport, and IO driver.
+ */
+
 #include "sil_io_config.h"
 
 #include "io_transport_udp.h"

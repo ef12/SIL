@@ -38,11 +38,32 @@ typedef struct
   bool initialized;
 } SilIoConfig;
 
+/**
+ * @brief Initializes the SIL IO subsystem.
+ *
+ * Creates the UDP socket, IO transport, and IO driver according to @p params.
+ *
+ * @param sil    SIL IO state to initialize (must not be NULL).
+ * @param params Configuration parameters (must not be NULL).
+ * @return true on success, false on failure.
+ */
 bool sil_io_config_init(SilIoConfig *sil, const SilIoConfigParams *params);
 
-/** Returns the IO driver, or NULL if not initialized. */
+/**
+ * @brief Returns the IO driver, or NULL if not initialized.
+ *
+ * @param sil Initialized SIL IO state.
+ * @return Pointer to the IO driver, or NULL.
+ */
 IoDriver *sil_io_config_get_driver(const SilIoConfig *sil);
 
+/**
+ * @brief Tears down the SIL IO subsystem and releases resources.
+ *
+ * Safe to call on an uninitialized or already-deinitialized instance (no-op).
+ *
+ * @param sil SIL IO state to deinitialize.
+ */
 void sil_io_config_deinit(SilIoConfig *sil);
 
 #ifdef __cplusplus

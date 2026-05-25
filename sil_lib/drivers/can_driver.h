@@ -37,8 +37,34 @@ struct CanDriver
   bool initialized;
 };
 
+/**
+ * @brief Sends a CAN frame via the driver.
+ *
+ * @param driver Initialized driver (must not be NULL).
+ * @param frame  Frame to send (must not be NULL).
+ * @return true on success, false if any argument is NULL or the driver
+ *         is not initialized.
+ */
 bool can_driver_send(const CanDriver *driver, const CanFrame *frame);
+
+/**
+ * @brief Receives a CAN frame from the driver.
+ *
+ * @param driver    Initialized driver (must not be NULL).
+ * @param out_frame Destination for the received frame (must not be NULL).
+ * @return true on success, false if any argument is NULL, the driver
+ *         is not initialized, or no frame is available.
+ */
 bool can_driver_receive(CanDriver *driver, CanFrame *out_frame);
+
+/**
+ * @brief Closes the driver and releases resources.
+ *
+ * After this call the driver is marked as not initialized.
+ * Safe to call with a NULL or already-closed driver (no-op).
+ *
+ * @param driver Driver to close.
+ */
 void can_driver_close(CanDriver *driver);
 
 #ifdef __cplusplus

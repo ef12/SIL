@@ -1,3 +1,8 @@
+/**
+ * @file can_emulator.c
+ * @brief Virtual CAN bus emulator — arbitration, routing, and node management.
+ */
+
 #include "can_emulator.h"
 
 #include <stdlib.h>

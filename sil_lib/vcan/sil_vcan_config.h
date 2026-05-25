@@ -35,11 +35,32 @@ typedef struct
   bool initialized;
 } SilVcanConfig;
 
+/**
+ * @brief Initializes the SIL virtual CAN subsystem.
+ *
+ * Creates the UDP socket, CAN transport, and CAN driver according to @p params.
+ *
+ * @param sil    SIL virtual CAN state to initialize (must not be NULL).
+ * @param params Configuration parameters (must not be NULL).
+ * @return true on success, false on failure.
+ */
 bool sil_vcan_config_init(SilVcanConfig *sil, const SilVcanConfigParams *params);
 
-/** Returns the CAN driver, or NULL if not initialized. */
+/**
+ * @brief Returns the CAN driver, or NULL if not initialized.
+ *
+ * @param sil Initialized SIL virtual CAN state.
+ * @return Pointer to the CAN driver, or NULL.
+ */
 CanDriver *sil_vcan_config_get_driver(const SilVcanConfig *sil);
 
+/**
+ * @brief Tears down the SIL virtual CAN subsystem and releases resources.
+ *
+ * Safe to call on an uninitialized or already-deinitialized instance (no-op).
+ *
+ * @param sil SIL virtual CAN state to deinitialize.
+ */
 void sil_vcan_config_deinit(SilVcanConfig *sil);
 
 #ifdef __cplusplus
