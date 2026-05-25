@@ -1,5 +1,6 @@
 #include "can_emulator.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 static bool is_valid_frame(const CanFrame *frame)
@@ -16,7 +17,7 @@ static CanEmulatorNode *find_node(CanEmulator *emulator, CanNodeId node_id)
     return NULL;
   }
 
-  for (i = 0; i < CAN_EMULATOR_MAX_NODES; ++i)
+  for (i = 0; i < emulator->max_nodes; ++i)
   {
     if (emulator->nodes[i].active && emulator->nodes[i].node_id == node_id)
     {
@@ -36,7 +37,7 @@ static const CanEmulatorNode *find_node_const(const CanEmulator *emulator, CanNo
     return NULL;
   }
 
-  for (i = 0; i < CAN_EMULATOR_MAX_NODES; ++i)
+  for (i = 0; i < emulator->max_nodes; ++i)
   {
     if (emulator->nodes[i].active && emulator->nodes[i].node_id == node_id)
     {
@@ -56,12 +57,12 @@ static bool enqueue_rx(CanEmulatorNode *node, const CanFrame *frame, CanNodeId s
     return false;
   }
 
-  if (node->rx_count >= CAN_EMULATOR_MAX_RX_QUEUE)
+  if (node->rx_count >= node->rx_capacity)
   {
     return false;
   }
 
-  write_index = (node->rx_head + node->rx_count) % CAN_EMULATOR_MAX_RX_QUEUE;
+  write_index = (node->rx_head + node->rx_count) % node->rx_capacity;
   node->rx_queue[write_index].frame = *frame;
   node->rx_queue[write_index].sender = sender;
   node->rx_count++;
@@ -94,13 +95,85 @@ static size_t find_best_tx_index(const CanEmulator *emulator)
   return best_index;
 }
 
-void can_emulator_init(CanEmulator *emulator)
+static void free_node_queues(CanEmulator *emulator)
 {
-  if (emulator == NULL)
+  size_t i;
+
+  if (emulator->nodes == NULL)
   {
     return;
   }
 
+  for (i = 0; i < emulator->max_nodes; ++i)
+  {
+    free(emulator->nodes[i].rx_queue);
+    emulator->nodes[i].rx_queue = NULL;
+  }
+}
+
+bool can_emulator_init(CanEmulator *emulator, const CanEmulatorConfig *config)
+{
+  size_t i;
+
+  if (emulator == NULL || config == NULL)
+  {
+    return false;
+  }
+
+  if (config->max_nodes == 0U || config->max_pending_tx == 0U || config->max_rx_queue == 0U)
+  {
+    return false;
+  }
+
+  (void)memset(emulator, 0, sizeof(*emulator));
+
+  emulator->nodes = (CanEmulatorNode *)calloc(config->max_nodes, sizeof(CanEmulatorNode));
+  if (emulator->nodes == NULL)
+  {
+    return false;
+  }
+
+  for (i = 0; i < config->max_nodes; ++i)
+  {
+    emulator->nodes[i].rx_queue =
+        (CanEmulatorRxEntry *)calloc(config->max_rx_queue, sizeof(CanEmulatorRxEntry));
+    if (emulator->nodes[i].rx_queue == NULL)
+    {
+      free_node_queues(emulator);
+      free(emulator->nodes);
+      emulator->nodes = NULL;
+      return false;
+    }
+    emulator->nodes[i].rx_capacity = config->max_rx_queue;
+  }
+
+  emulator->pending_tx =
+      (CanEmulatorTxEntry *)calloc(config->max_pending_tx, sizeof(CanEmulatorTxEntry));
+  if (emulator->pending_tx == NULL)
+  {
+    free_node_queues(emulator);
+    free(emulator->nodes);
+    emulator->nodes = NULL;
+    return false;
+  }
+
+  emulator->max_nodes = config->max_nodes;
+  emulator->max_pending_tx = config->max_pending_tx;
+  emulator->max_rx_queue = config->max_rx_queue;
+  emulator->initialized = true;
+  return true;
+}
+
+void can_emulator_deinit(CanEmulator *emulator)
+{
+  if (emulator == NULL || !emulator->initialized)
+  {
+    return;
+  }
+
+  free_node_queues(emulator);
+  free(emulator->nodes);
+  free(emulator->pending_tx);
   (void)memset(emulator, 0, sizeof(*emulator));
 }
 
@@ -108,7 +181,7 @@ bool can_emulator_register_node(CanEmulator *emulator, CanNodeId node_id)
 {
   size_t i;
 
-  if (emulator == NULL)
+  if (emulator == NULL || !emulator->initialized)
   {
     return false;
   }
@@ -118,7 +191,7 @@ bool can_emulator_register_node(CanEmulator *emulator, CanNodeId node_id)
     return true;
   }
 
-  for (i = 0; i < CAN_EMULATOR_MAX_NODES; ++i)
+  for (i = 0; i < emulator->max_nodes; ++i)
   {
     if (!emulator->nodes[i].active)
     {
@@ -137,7 +210,7 @@ bool can_emulator_submit(CanEmulator *emulator, CanNodeId sender, const CanFrame
 {
   CanEmulatorTxEntry *entry;
 
-  if (emulator == NULL || !is_valid_frame(frame))
+  if (emulator == NULL || !emulator->initialized || !is_valid_frame(frame))
   {
     return false;
   }
@@ -147,7 +220,7 @@ bool can_emulator_submit(CanEmulator *emulator, CanNodeId sender, const CanFrame
     return false;
   }
 
-  if (emulator->pending_tx_count >= CAN_EMULATOR_MAX_PENDING_TX)
+  if (emulator->pending_tx_count >= emulator->max_pending_tx)
   {
     return false;
   }
@@ -168,7 +241,7 @@ bool can_emulator_step(CanEmulator *emulator)
   size_t best_index;
   CanEmulatorTxEntry selected;
 
-  if (emulator == NULL || emulator->pending_tx_count == 0U)
+  if (emulator == NULL || !emulator->initialized || emulator->pending_tx_count == 0U)
   {
     return false;
   }
@@ -182,7 +255,7 @@ bool can_emulator_step(CanEmulator *emulator)
   }
   emulator->pending_tx_count--;
 
-  for (i = 0; i < CAN_EMULATOR_MAX_NODES; ++i)
+  for (i = 0; i < emulator->max_nodes; ++i)
   {
     CanEmulatorNode *node = &emulator->nodes[i];
 
@@ -206,7 +279,7 @@ bool can_emulator_receive(CanEmulator *emulator, CanNodeId receiver, CanFrame *o
   CanEmulatorNode *node;
   CanEmulatorRxEntry *entry;
 
-  if (emulator == NULL || out_frame == NULL)
+  if (emulator == NULL || !emulator->initialized || out_frame == NULL)
   {
     return false;
   }
@@ -224,14 +297,14 @@ bool can_emulator_receive(CanEmulator *emulator, CanNodeId receiver, CanFrame *o
     *out_sender = entry->sender;
   }
 
-  node->rx_head = (node->rx_head + 1U) % CAN_EMULATOR_MAX_RX_QUEUE;
+  node->rx_head = (node->rx_head + 1U) % node->rx_capacity;
   node->rx_count--;
   return true;
 }
 
 size_t can_emulator_pending_tx_count(const CanEmulator *emulator)
 {
-  if (emulator == NULL)
+  if (emulator == NULL || !emulator->initialized)
   {
     return 0U;
   }

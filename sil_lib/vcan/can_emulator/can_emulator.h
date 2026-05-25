@@ -16,14 +16,8 @@
 extern "C" {
 #endif
 
-/** Maximum registered nodes in the emulator. */
-#define CAN_EMULATOR_MAX_NODES      16U
-/** Maximum queued transmit frames awaiting arbitration. */
-#define CAN_EMULATOR_MAX_PENDING_TX 64U
-/** Maximum receive queue depth per node. */
-#define CAN_EMULATOR_MAX_RX_QUEUE   64U
 /** Emulator payload size aligned to shared CAN frame payload size. */
-#define CAN_EMULATOR_MAX_DATA_LEN   CAN_FRAME_MAX_DATA_LEN
+#define CAN_EMULATOR_MAX_DATA_LEN CAN_FRAME_MAX_DATA_LEN
 
 /** Emulator node identifier type. */
 typedef uint8_t CanNodeId;
@@ -61,8 +55,10 @@ typedef struct
   CanNodeId node_id;
   /** Slot usage flag. */
   bool active;
-  /** Circular receive queue. */
-  CanEmulatorRxEntry rx_queue[CAN_EMULATOR_MAX_RX_QUEUE];
+  /** Dynamically allocated circular receive queue. */
+  CanEmulatorRxEntry *rx_queue;
+  /** Capacity of the receive queue. */
+  size_t rx_capacity;
   /** Receive queue head index. */
   size_t rx_head;
   /** Number of queued receive entries. */
@@ -70,26 +66,58 @@ typedef struct
 } CanEmulatorNode;
 
 /**
+ * @brief Configuration for emulator capacity.
+ */
+typedef struct
+{
+  /** Maximum registered nodes. */
+  size_t max_nodes;
+  /** Maximum pending TX frames awaiting arbitration. */
+  size_t max_pending_tx;
+  /** Maximum receive queue depth per node. */
+  size_t max_rx_queue;
+} CanEmulatorConfig;
+
+/**
  * @brief Virtual CAN bus emulator state.
  */
 typedef struct
 {
-  /** Registered nodes table. */
-  CanEmulatorNode nodes[CAN_EMULATOR_MAX_NODES];
-  /** Pending transmit frames awaiting arbitration. */
-  CanEmulatorTxEntry pending_tx[CAN_EMULATOR_MAX_PENDING_TX];
+  /** Dynamically allocated nodes table. */
+  CanEmulatorNode *nodes;
+  /** Capacity of the nodes table. */
+  size_t max_nodes;
+  /** Dynamically allocated pending transmit queue. */
+  CanEmulatorTxEntry *pending_tx;
+  /** Capacity of the pending transmit queue. */
+  size_t max_pending_tx;
+  /** Maximum receive queue depth per node. */
+  size_t max_rx_queue;
   /** Number of pending transmit entries. */
   size_t pending_tx_count;
   /** Next submission sequence counter. */
   uint32_t next_sequence;
+  /** Initialization state flag. */
+  bool initialized;
 } CanEmulator;
 
 /**
- * @brief Initializes the emulator state.
+ * @brief Initializes the emulator with the given capacity.
+ *
+ * Allocates internal arrays. Must be paired with can_emulator_deinit().
+ *
+ * @param emulator Emulator instance.
+ * @param config Capacity configuration.
+ * @return true on success, false on invalid input or allocation failure.
+ */
+bool can_emulator_init(CanEmulator *emulator, const CanEmulatorConfig *config);
+
+/**
+ * @brief Frees all resources owned by the emulator.
  *
  * @param emulator Emulator instance.
  */
-void can_emulator_init(CanEmulator *emulator);
+void can_emulator_deinit(CanEmulator *emulator);
 
 /**
  * @brief Registers a node on the virtual bus.

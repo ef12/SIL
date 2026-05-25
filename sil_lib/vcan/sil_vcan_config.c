@@ -106,6 +106,7 @@ static void cleanup(SilVcanInternal *si)
     return;
   }
 
+  can_emulator_deinit(&si->emulator);
   udp_socket_close(&si->socket);
   free(si);
 }
@@ -113,6 +114,12 @@ static void cleanup(SilVcanInternal *si)
 bool sil_vcan_config_init(SilVcanConfig *sil, const SilVcanConfigParams *params)
 {
   SilVcanInternal *si;
+
+  const CanEmulatorConfig emu_cfg = {
+      .max_nodes = 2U,
+      .max_pending_tx = 16U,
+      .max_rx_queue = 16U,
+  };
 
   if (sil == NULL || params == NULL || params->remote_ip == NULL)
   {
@@ -138,7 +145,11 @@ bool sil_vcan_config_init(SilVcanConfig *sil, const SilVcanConfigParams *params)
   }
 
   /* Initialize the CAN bus emulator with local and remote nodes. */
-  can_emulator_init(&si->emulator);
+  if (!can_emulator_init(&si->emulator, &emu_cfg))
+  {
+    cleanup(si);
+    return false;
+  }
 
   if (!can_emulator_register_node(&si->emulator, LOCAL_NODE_ID))
   {

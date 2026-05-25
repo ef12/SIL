@@ -321,14 +321,14 @@ CAN frames are serialized as fixed 13-byte UDP datagrams:
 
 The `can_emulator` module provides a deterministic in-memory virtual CAN bus
 used internally by `sil_vcan_config` to model CAN controller behavior.
+All internal arrays are dynamically allocated at init time — there are no
+compile-time size limits.
 
-### Features
+See [SDD_sil_can_emulator.md](can_emulator/SDD_sil_can_emulator.md) for full
+design details.
 
-- Up to `CAN_EMULATOR_MAX_NODES` (16) registered nodes
-- Up to `CAN_EMULATOR_MAX_PENDING_TX` (64) pending transmit frames
-- Per-node receive queue of `CAN_EMULATOR_MAX_RX_QUEUE` (64) frames
-- Deterministic arbitration: lowest CAN ID wins; sequence number tie-break
-- Stepped execution: `can_emulator_step()` processes one frame per call
+The vCAN config layer creates the emulator with a minimal configuration
+suited for point-to-point communication (2 nodes, 16-deep queues).
 
 ## 7. Configuration Reference
 
@@ -340,15 +340,6 @@ used internally by `sil_vcan_config` to model CAN controller behavior.
 | `remote_ip` | `const char*` | Peer IPv4 address (e.g. `"127.0.0.1"`) |
 | `remote_port` | `uint16_t` | Peer UDP port |
 | `timeout_ms` | `uint32_t` | Socket receive timeout; use `1` for non-blocking poll |
-
-### Emulator Limits
-
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `CAN_EMULATOR_MAX_NODES` | 16 | Max registered nodes per emulator |
-| `CAN_EMULATOR_MAX_PENDING_TX` | 64 | Max pending TX frames awaiting arbitration |
-| `CAN_EMULATOR_MAX_RX_QUEUE` | 64 | Max queued RX frames per node |
-| `CAN_FRAME_MAX_DATA_LEN` | 8 | CAN frame payload size (bytes) |
 
 ## 8. API Reference
 
@@ -382,7 +373,8 @@ used internally by `sil_vcan_config` to model CAN controller behavior.
 
 | Function | Description |
 |----------|-------------|
-| `can_emulator_init()` | Zero-initialize emulator state |
+| `can_emulator_init(emu, config)` | Allocate and initialize with given capacity |
+| `can_emulator_deinit(emu)` | Free all resources |
 | `can_emulator_register_node()` | Add a node to the virtual bus |
 | `can_emulator_submit()` | Enqueue a frame for arbitration |
 | `can_emulator_step()` | Arbitrate + route one winning frame to all other nodes |
@@ -400,6 +392,7 @@ used internally by `sil_vcan_config` to model CAN controller behavior.
 | `sil_lib/vcan/can_transport_udp/test/test_can_transport_udp.c` | Transport unit tests |
 | `sil_lib/vcan/can_emulator/can_emulator.h` | Emulator API (internal) |
 | `sil_lib/vcan/can_emulator/can_emulator.c` | Emulator implementation |
+| `sil_lib/vcan/can_emulator/SDD_sil_can_emulator.md` | Emulator design document |
 | `sil_lib/vcan/can_emulator/test/test_can_emulator.c` | Emulator unit tests |
 
 ## 10. Dependencies
