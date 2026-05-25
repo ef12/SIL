@@ -12,9 +12,10 @@ add_library(sil_lib
 )
 target_include_directories(sil_lib
     PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/drivers
-        ${SIL_IO_CONFIG_ROOT}
-        ${SIL_VCAN_CONFIG_ROOT}
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/drivers>
+        $<BUILD_INTERFACE:${SIL_IO_CONFIG_ROOT}>
+        $<BUILD_INTERFACE:${SIL_VCAN_CONFIG_ROOT}>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/sil_lib>
     PRIVATE
         ${UDP_SOCKET_ROOT}
         ${IO_TRANSPORT_UDP_ROOT}
@@ -26,3 +27,45 @@ target_link_libraries(sil_lib
         ${UDP_SOCKET_PLATFORM_LIBS}
 )
 set_module_output_layout(sil_lib "sil_lib")
+
+# --- Install / Export ---------------------------------------------------
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+install(TARGETS sil_lib
+    EXPORT SilLibTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+install(FILES
+    drivers/can_frame.h
+    drivers/can_driver.h
+    drivers/io_driver.h
+    io/sil_io_config.h
+    vcan/sil_vcan_config.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/sil_lib
+)
+
+install(EXPORT SilLibTargets
+    FILE SilLibTargets.cmake
+    NAMESPACE SilLib::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/SilLib
+)
+
+configure_package_config_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/SilLibConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/SilLibConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/SilLib
+)
+
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/SilLibConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/SilLibConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/SilLibConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/SilLib
+)
