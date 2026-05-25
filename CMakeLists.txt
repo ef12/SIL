@@ -141,6 +141,19 @@ if(BUILD_PRODUCTION)
     )
     set_module_output_layout(sil_io_config_lib "sil_lib/io")
 
+    add_library(can_emulator_lib
+        sil_lib/vcan/can_emulator/can_emulator.c
+    )
+    target_include_directories(can_emulator_lib
+        PUBLIC
+            ${SIL_VCAN_CONFIG_ROOT}/can_emulator
+    )
+    target_link_libraries(can_emulator_lib
+        PUBLIC
+            can_frame_lib
+    )
+    set_module_output_layout(can_emulator_lib "sil_lib/vcan/can_emulator")
+
     add_library(sil_vcan_config_lib
         sil_lib/vcan/sil_vcan_config.c
     )
@@ -152,6 +165,7 @@ if(BUILD_PRODUCTION)
         PUBLIC
             can_driver_lib
         PRIVATE
+            can_emulator_lib
             can_transport_udp_lib
             sil_config_udp_socket_lib
     )

@@ -2,84 +2,305 @@
 
 ## 1. Purpose
 
-The SIL vCAN subsystem provides virtual CAN communication for the SIL platform.
-It allows an embedded application using the abstract `CanDriver` interface to exchange
-CAN frames with a remote peer over UDP, and optionally use an in-memory bus emulator
-for multi-node arbitration.
+The SIL vCAN subsystem replaces physical CAN hardware with a software stack
+that provides realistic CAN bus behavior for simulation. It lets application
+code use the standard `CanDriver` interface without knowing whether it runs
+on real hardware or a simulated environment.
+
+The subsystem has three layers:
+
+```mermaid
+block-beta
+  columns 1
+  block:app["Application Code"]
+    A["CanDriver — send / receive / close"]
+  end
+  space
+  block:emu["CAN Emulator"]
+    B["TX arbitration, RX queuing — CAN HW behavior"]
+  end
+  space
+  block:udp["CAN-over-UDP Transport"]
+    C["Serializes frames, sends/receives via UDP"]
+  end
+
+  app --> emu --> udp
+```
 
 ## 2. Components
 
 | Component | File(s) | Responsibility |
 |-----------|---------|----------------|
 | `sil_vcan_config` | `sil_vcan_config.h`, `.c` | BSP entry point: init, driver access, teardown |
-| `can_transport_udp` | `can_transport_udp/can_transport_udp.h`, `.c` | CAN frame ↔ UDP serialization |
 | `can_emulator` | `can_emulator/can_emulator.h`, `.c` | In-memory virtual CAN bus with arbitration |
+| `can_transport_udp` | `can_transport_udp/can_transport_udp.h`, `.c` | CAN frame ↔ UDP serialization |
 
-## 3. Public API
+## 3. Architecture
 
-Applications include only `sil_vcan_config.h`:
+### 3.1 Internal Ownership
 
-```c
-#include "sil_vcan_config.h"
+Each `SilVcanConfig` instance owns a self-contained stack:
 
-SilVcanConfig sil_can = {0};
-SilVcanConfigParams params = {
-    .local_port  = 7401,
-    .remote_ip   = "127.0.0.1",
-    .remote_port = 7402,
-    .timeout_ms  = 1,   /* non-blocking poll */
-};
+```mermaid
+graph TD
+    A[SilVcanConfig] --> B["SilVcanInternal<br/>(heap-allocated, opaque)"]
+    B --> C["UdpSocket<br/>bound to local_port"]
+    B --> D["CanTransportUdp<br/>remote_ip:remote_port"]
+    B --> E["CanEmulator<br/>2 nodes: LOCAL(0), REMOTE(1)"]
+    B --> F["SilCanDriver<br/>function pointers → emulator + transport"]
+    F -.-> D
+    F -.-> E
+    D -.-> C
 
-sil_vcan_config_init(&sil_can, &params);
-CanDriver *can = sil_vcan_config_get_driver(&sil_can);
-
-/* Use can_driver_send(), can_driver_receive(), etc. */
-
-sil_vcan_config_deinit(&sil_can);
+    style A fill:#4a9,stroke:#333,color:#fff
+    style B fill:#369,stroke:#333,color:#fff
+    style C fill:#666,stroke:#333,color:#fff
+    style D fill:#666,stroke:#333,color:#fff
+    style E fill:#963,stroke:#333,color:#fff
+    style F fill:#666,stroke:#333,color:#fff
 ```
 
-### Functions
+### 3.2 Emulator Nodes
 
-| Function | Description |
-|----------|-------------|
-| `sil_vcan_config_init()` | Opens socket with receive timeout, inits transport, wires driver |
-| `sil_vcan_config_get_driver()` | Returns `CanDriver *` with wired function pointers |
-| `sil_vcan_config_deinit()` | Closes socket, frees memory |
+The emulator registers two logical nodes per bus instance:
 
-### Configuration Parameters
+| Node | ID | Role |
+|------|----|------|
+| `LOCAL`  | 0 | The application's CAN controller |
+| `REMOTE` | 1 | Represents the peer on the other end of the UDP link |
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `local_port` | `uint16_t` | UDP port to bind |
-| `remote_ip` | `const char *` | Peer IPv4 address |
-| `remote_port` | `uint16_t` | Peer UDP port |
-| `timeout_ms` | `uint32_t` | Receive timeout (0 = blocking) |
+When LOCAL sends, frames are routed to REMOTE's RX queue (then forwarded over
+UDP). When UDP frames arrive, they are submitted as REMOTE and routed to
+LOCAL's RX queue (then dequeued by the application).
 
-## 4. Internal Design
+### 3.3 Driver Extension Pattern
 
-### Driver Extension Pattern
+`SilCanDriver` embeds `CanDriver` as its first member and adds pointers to the
+`CanEmulator` and `CanTransportUdp` instances. The `send` and `receive`
+callbacks route frames through the emulator for arbitration before hitting the
+UDP transport.
 
-`SilCanDriver` embeds `CanDriver` as its first member and adds a pointer to the
-`CanTransportUdp` instance. The `send` and `receive` callbacks delegate to
-`can_transport_udp_send_frame` and `can_transport_udp_receive_frame`.
-
-### Ownership
-
-`SilVcanInternal` is a heap-allocated struct that owns:
-
-- `UdpSocket` — bound to `local_port` with configurable receive timeout
-- `CanTransportUdp` — bound to the socket
-- `SilCanDriver` — the extended driver with wired callbacks
-
-### Receive Model
+### 3.4 Receive Model
 
 Unlike the IO subsystem, CAN uses **polled receive** — the application calls
 `can_driver_receive()` in its main loop. No background thread is used.
 The socket timeout controls how long each receive call blocks.
 
-### Teardown
+### 3.5 Send Flow
 
-`sil_vcan_config_deinit()` closes the socket and frees the internal struct.
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant Drv as SilCanDriver
+    participant Emu as CanEmulator
+    participant UDP as CanTransportUdp
+    participant Peer as Remote Peer
+
+    App->>Drv: can_driver_send(&frame)
+    Drv->>Emu: can_emulator_submit(LOCAL, &frame)
+    Note over Emu: Frame enters TX pending queue
+    loop Until TX queue empty
+        Drv->>Emu: can_emulator_step()
+        Note over Emu: Arbitration: lowest CAN ID wins<br/>Winner routed to REMOTE RX queue
+    end
+    loop Drain REMOTE RX queue
+        Drv->>Emu: can_emulator_receive(REMOTE, &routed)
+        Drv->>UDP: can_transport_udp_send_frame(&routed)
+        UDP->>Peer: UDP datagram
+    end
+    Drv-->>App: true
+```
+
+### 3.6 Receive Flow
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant Drv as SilCanDriver
+    participant UDP as CanTransportUdp
+    participant Emu as CanEmulator
+    participant Peer as Remote Peer
+
+    App->>Drv: can_driver_receive(&out_frame)
+    loop Pull all from UDP
+        Peer->>UDP: UDP datagram
+        Drv->>UDP: can_transport_udp_receive_frame(&incoming)
+        Drv->>Emu: can_emulator_submit(REMOTE, &incoming)
+        Note over Emu: Injected as remote-node frame
+    end
+    loop Until TX queue empty
+        Drv->>Emu: can_emulator_step()
+        Note over Emu: Arbitration: lowest CAN ID wins<br/>Winner routed to LOCAL RX queue
+    end
+    Drv->>Emu: can_emulator_receive(LOCAL, &out_frame)
+    Emu-->>Drv: frame (priority-ordered)
+    Drv-->>App: true + out_frame
+```
+
+If multiple frames arrive from the peer simultaneously, the emulator delivers
+them in CAN arbitration order, not raw UDP arrival order.
+
+## 4. Usage
+
+### 4.1 Initialization (BSP Phase)
+
+Each virtual CAN bus is created by initializing one `SilVcanConfig` instance.
+This allocates and wires together the internal components:
+
+```c
+#include "sil_vcan_config.h"
+
+SilVcanConfig sil_can = {0};
+
+SilVcanConfigParams params = {
+    .local_port  = 7401,
+    .remote_ip   = "127.0.0.1",
+    .remote_port = 7402,
+    .timeout_ms  = 1,    /* non-blocking poll */
+};
+
+sil_vcan_config_init(&sil_can, &params);
+```
+
+Then retrieve the abstract driver handle:
+
+```c
+CanDriver *can = sil_vcan_config_get_driver(&sil_can);
+```
+
+The application uses only `can_driver_send()` and `can_driver_receive()` from
+this point on. It never touches the emulator or transport directly.
+
+### 4.2 Teardown
+
+```c
+can_driver_close(can);
+sil_vcan_config_deinit(&sil_can);
+```
+
+This closes the UDP socket and frees all internal state.
+
+### 4.3 Multiple CAN Buses
+
+Each `SilVcanConfig` is a fully independent bus. To simulate an ECU with
+multiple CAN controllers, create one instance per bus:
+
+```c
+/*  BUS 1 — engine sensors  */
+SilVcanConfig sil_can1 = {0};
+SilVcanConfigParams bus1_params = {
+    .local_port  = 7401,
+    .remote_ip   = "127.0.0.1",
+    .remote_port = 7402,
+    .timeout_ms  = 1,
+};
+sil_vcan_config_init(&sil_can1, &bus1_params);
+
+/*  BUS 2 — body network  */
+SilVcanConfig sil_can2 = {0};
+SilVcanConfigParams bus2_params = {
+    .local_port  = 7403,
+    .remote_ip   = "127.0.0.1",
+    .remote_port = 7404,
+    .timeout_ms  = 1,
+};
+sil_vcan_config_init(&sil_can2, &bus2_params);
+
+CanDriver *can_engine = sil_vcan_config_get_driver(&sil_can1);
+CanDriver *can_body   = sil_vcan_config_get_driver(&sil_can2);
+```
+
+Each bus is fully isolated — separate socket, separate emulator, separate
+driver. Application modules receive a `CanDriver*` and don't know which bus
+they're on.
+
+```mermaid
+graph LR
+    subgraph implement.exe
+        CAN1["vCAN Bus 1<br/>:7401"]
+        CAN2["vCAN Bus 2<br/>:7403"]
+    end
+
+    CAN1 <-->|"UDP 7401 ↔ 7402"| S1["Sensor Sim<br/>Process :7402"]
+    CAN2 <-->|"UDP 7403 ↔ 7404"| S2["Body Network<br/>Sim Process :7404"]
+
+    style CAN1 fill:#369,stroke:#333,color:#fff
+    style CAN2 fill:#369,stroke:#333,color:#fff
+    style S1 fill:#963,stroke:#333,color:#fff
+    style S2 fill:#963,stroke:#333,color:#fff
+```
+
+### 4.4 Multiple Nodes on One Bus
+
+Multiple CAN nodes on the same bus do **not** require multiple UDP links.
+On a real CAN bus, all nodes share the wire and are distinguished by CAN IDs.
+
+The peer process simulates as many nodes as needed. Each simulated sensor or
+actuator uses a different CAN ID:
+
+```mermaid
+graph LR
+    subgraph implement.exe
+        TX["Sends:<br/>0x18FF50E5"]
+        RX["Receives:<br/>0x18FF60E5"]
+    end
+
+    subgraph Peer Process
+        SA["Sensor A<br/>0x0CF004"]
+        SB["Sensor B<br/>0x18FEF1"]
+        AC["Actuator<br/>0x0CFF01"]
+    end
+
+    TX <-->|"single UDP link<br/>7401 ↔ 7402"| SA
+    TX <--> SB
+    TX <--> AC
+    RX <--> SA
+    RX <--> SB
+    RX <--> AC
+
+    style TX fill:#369,stroke:#333,color:#fff
+    style RX fill:#369,stroke:#333,color:#fff
+    style SA fill:#963,stroke:#333,color:#fff
+    style SB fill:#963,stroke:#333,color:#fff
+    style AC fill:#963,stroke:#333,color:#fff
+```
+
+The emulator provides CAN arbitration: if Sensor A and Sensor B both send
+frames, the one with the lower CAN ID is delivered to the application first.
+
+### 4.5 Full Topology Example
+
+```mermaid
+graph TD
+    subgraph implement.exe
+        subgraph Application Layer
+            FC[FanCtrl]
+            MB[Module B]
+            MC[Module C]
+        end
+        subgraph BSP Layer - sil_lib
+            BUS1["vCAN Bus 1<br/>:7401"]
+            BUS2["vCAN Bus 2<br/>:7403"]
+        end
+        FC -->|"CanDriver*"| BUS1
+        MB -->|"CanDriver* (shared)"| BUS1
+        MC -->|"CanDriver*"| BUS2
+    end
+
+    BUS1 <-->|UDP| P1["Peer :7402"]
+    BUS2 <-->|UDP| P2["Peer :7404"]
+
+    style FC fill:#4a9,stroke:#333,color:#fff
+    style MB fill:#4a9,stroke:#333,color:#fff
+    style MC fill:#4a9,stroke:#333,color:#fff
+    style BUS1 fill:#369,stroke:#333,color:#fff
+    style BUS2 fill:#369,stroke:#333,color:#fff
+    style P1 fill:#963,stroke:#333,color:#fff
+    style P2 fill:#963,stroke:#333,color:#fff
+```
+
+Multiple modules can share the same `CanDriver*` pointer if they are on the
+same bus. Each bus needs its own `SilVcanConfig` with a unique port pair.
 
 ## 5. Wire Protocol
 
@@ -96,6 +317,57 @@ CAN frames are serialized as fixed 13-byte UDP datagrams:
 - Payload must be exactly `CAN_TRANSPORT_UDP_WIRE_SIZE` (13) bytes
 - Decoded frame must pass `can_frame_is_valid()` (DLC ≤ 8)
 
+## 6. CAN Emulator
+
+The `can_emulator` module provides a deterministic in-memory virtual CAN bus
+used internally by `sil_vcan_config` to model CAN controller behavior.
+
+### Features
+
+- Up to `CAN_EMULATOR_MAX_NODES` (16) registered nodes
+- Up to `CAN_EMULATOR_MAX_PENDING_TX` (64) pending transmit frames
+- Per-node receive queue of `CAN_EMULATOR_MAX_RX_QUEUE` (64) frames
+- Deterministic arbitration: lowest CAN ID wins; sequence number tie-break
+- Stepped execution: `can_emulator_step()` processes one frame per call
+
+## 7. Configuration Reference
+
+### SilVcanConfigParams
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `local_port` | `uint16_t` | UDP port to bind locally |
+| `remote_ip` | `const char*` | Peer IPv4 address (e.g. `"127.0.0.1"`) |
+| `remote_port` | `uint16_t` | Peer UDP port |
+| `timeout_ms` | `uint32_t` | Socket receive timeout; use `1` for non-blocking poll |
+
+### Emulator Limits
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `CAN_EMULATOR_MAX_NODES` | 16 | Max registered nodes per emulator |
+| `CAN_EMULATOR_MAX_PENDING_TX` | 64 | Max pending TX frames awaiting arbitration |
+| `CAN_EMULATOR_MAX_RX_QUEUE` | 64 | Max queued RX frames per node |
+| `CAN_FRAME_MAX_DATA_LEN` | 8 | CAN frame payload size (bytes) |
+
+## 8. API Reference
+
+### Public API (`sil_vcan_config.h`)
+
+| Function | Description |
+|----------|-------------|
+| `sil_vcan_config_init()` | Opens socket, inits transport and emulator, wires driver |
+| `sil_vcan_config_get_driver()` | Returns `CanDriver *` with wired function pointers |
+| `sil_vcan_config_deinit()` | Closes socket, frees memory |
+
+### Application-level API (`can_driver.h`)
+
+| Function | Description |
+|----------|-------------|
+| `can_driver_send()` | Submit frame through emulator → UDP |
+| `can_driver_receive()` | Pull UDP → emulator arbitration → dequeue |
+| `can_driver_close()` | Mark driver as uninitialized |
+
 ### Transport API (internal)
 
 | Function | Description |
@@ -106,21 +378,7 @@ CAN frames are serialized as fixed 13-byte UDP datagrams:
 | `can_transport_udp_send_frame()` | Encode + `sendto` |
 | `can_transport_udp_receive_frame()` | `recvfrom` + decode |
 
-## 6. CAN Emulator
-
-The `can_emulator` module provides a deterministic in-memory virtual CAN bus for
-multi-node simulation. It is available as part of the SIL library but is not used
-by `sil_vcan_config` (which uses point-to-point UDP instead).
-
-### Features
-
-- Up to `CAN_EMULATOR_MAX_NODES` (16) registered nodes
-- Up to `CAN_EMULATOR_MAX_PENDING_TX` (64) pending transmit frames
-- Per-node receive queue of `CAN_EMULATOR_MAX_RX_QUEUE` (64) frames
-- Deterministic arbitration: lowest CAN ID wins; sequence number tie-break
-- Stepped execution: `can_emulator_step()` processes one frame per call
-
-### API
+### Emulator API (internal)
 
 | Function | Description |
 |----------|-------------|
@@ -129,9 +387,9 @@ by `sil_vcan_config` (which uses point-to-point UDP instead).
 | `can_emulator_submit()` | Enqueue a frame for arbitration |
 | `can_emulator_step()` | Arbitrate + route one winning frame to all other nodes |
 | `can_emulator_receive()` | Pop one frame from a node's receive queue |
-| `can_emulator_pending_count()` | Query pending transmit count |
+| `can_emulator_pending_tx_count()` | Query pending transmit count |
 
-## 7. File Structure
+## 9. File Structure
 
 | File | Role |
 |------|------|
@@ -144,17 +402,18 @@ by `sil_vcan_config` (which uses point-to-point UDP instead).
 | `sil_lib/vcan/can_emulator/can_emulator.c` | Emulator implementation |
 | `sil_lib/vcan/can_emulator/test/test_can_emulator.c` | Emulator unit tests |
 
-## 8. Dependencies
+## 10. Dependencies
 
 | Dependency | Visibility | Purpose |
 |------------|------------|---------|
 | `can_driver` | Public | Abstract `CanDriver` type returned to application |
 | `can_frame` | Public (transitive) | Shared `CanFrame` type |
+| `can_emulator` | Private | In-memory CAN bus with arbitration |
 | `can_transport_udp` | Private | CAN frame serialization over UDP |
 | `sil_config_udp_socket` | Private | Shared socket init helper |
 | `udp_socket` | Private (transitive) | Platform UDP primitives |
 
-## 9. Verification
+## 11. Verification
 
 ```powershell
 Set-Location test

@@ -1,17 +1,26 @@
 #include "sil_vcan_config.h"
 
+#include "can_emulator.h"
 #include "can_transport_udp.h"
 #include "sil_config_udp_socket.h"
 
 #include <stdlib.h>
 
 /* ================================================================
- *  SIL CAN driver — extends CanDriver with transport pointer.
+ *  Internal node IDs for the emulated CAN bus.
+ * ================================================================ */
+
+#define LOCAL_NODE_ID  ((CanNodeId)0U)
+#define REMOTE_NODE_ID ((CanNodeId)1U)
+
+/* ================================================================
+ *  SIL CAN driver — extends CanDriver with emulator + transport.
  * ================================================================ */
 
 typedef struct
 {
   CanDriver base;
+  CanEmulator *emulator;
   CanTransportUdp *transport;
 } SilCanDriver;
 
@@ -27,12 +36,55 @@ static const SilCanDriver *can_to_sil_const(const CanDriver *self)
 
 static bool sil_can_send(const CanDriver *self, const CanFrame *frame)
 {
-  return can_transport_udp_send_frame(can_to_sil_const(self)->transport, frame);
+  const SilCanDriver *sil = can_to_sil_const(self);
+  CanFrame routed;
+
+  /* Submit frame into the emulator TX queue. */
+  if (!can_emulator_submit(sil->emulator, LOCAL_NODE_ID, frame))
+  {
+    return false;
+  }
+
+  /* Run arbitration — route all pending frames. */
+  while (can_emulator_step(sil->emulator))
+  {
+    /* intentionally empty */
+  }
+
+  /* Drain the remote node's RX queue and forward over UDP. */
+  while (can_emulator_receive(sil->emulator, REMOTE_NODE_ID, &routed, NULL))
+  {
+    if (!can_transport_udp_send_frame(sil->transport, &routed))
+    {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 static bool sil_can_receive(CanDriver *self, CanFrame *out_frame)
 {
-  return can_transport_udp_receive_frame(can_to_sil(self)->transport, out_frame, NULL, 0U, NULL);
+  SilCanDriver *sil = can_to_sil(self);
+  CanFrame incoming;
+
+  /* Pull any frames from UDP and inject as remote-node submissions. */
+  while (can_transport_udp_receive_frame(sil->transport, &incoming, NULL, 0U, NULL))
+  {
+    if (!can_emulator_submit(sil->emulator, REMOTE_NODE_ID, &incoming))
+    {
+      break;
+    }
+  }
+
+  /* Run arbitration — route all pending frames. */
+  while (can_emulator_step(sil->emulator))
+  {
+    /* intentionally empty */
+  }
+
+  /* Dequeue one frame from the local node's RX queue. */
+  return can_emulator_receive(sil->emulator, LOCAL_NODE_ID, out_frame, NULL);
 }
 
 /* ================================================================
@@ -43,6 +95,7 @@ typedef struct
 {
   UdpSocket socket;
   CanTransportUdp transport;
+  CanEmulator emulator;
   SilCanDriver driver;
 } SilVcanInternal;
 
@@ -84,11 +137,27 @@ bool sil_vcan_config_init(SilVcanConfig *sil, const SilVcanConfigParams *params)
     return false;
   }
 
+  /* Initialize the CAN bus emulator with local and remote nodes. */
+  can_emulator_init(&si->emulator);
+
+  if (!can_emulator_register_node(&si->emulator, LOCAL_NODE_ID))
+  {
+    cleanup(si);
+    return false;
+  }
+
+  if (!can_emulator_register_node(&si->emulator, REMOTE_NODE_ID))
+  {
+    cleanup(si);
+    return false;
+  }
+
   /* Wire up the SIL CAN driver. */
   si->driver.base.send = sil_can_send;
   si->driver.base.receive = sil_can_receive;
   si->driver.base.close = NULL;
   si->driver.base.initialized = true;
+  si->driver.emulator = &si->emulator;
   si->driver.transport = &si->transport;
 
   sil->internal = si;
