@@ -1,0 +1,26 @@
+add_library(sil_lib
+    udp_socket/udp_socket.c
+    udp_socket/sil_config_udp_socket.c
+    io/io_transport_udp/io_transport_udp.c
+    io/sil_io_config.c
+    vcan/can_transport_udp/can_transport_udp.c
+    vcan/can_emulator/can_emulator.c
+    vcan/sil_vcan_config.c
+)
+target_include_directories(sil_lib
+    PUBLIC
+        ${SIL_IO_CONFIG_ROOT}
+        ${SIL_VCAN_CONFIG_ROOT}
+    PRIVATE
+        ${UDP_SOCKET_ROOT}
+        ${IO_TRANSPORT_UDP_ROOT}
+        ${CAN_TRANSPORT_UDP_ROOT}
+        ${SIL_VCAN_CONFIG_ROOT}/can_emulator
+)
+target_link_libraries(sil_lib
+    PUBLIC
+        io_driver_lib
+        can_driver_lib
+        ${UDP_SOCKET_PLATFORM_LIBS}
+)
+set_module_output_layout(sil_lib "sil_lib")

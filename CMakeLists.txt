@@ -38,19 +38,6 @@ function(set_module_output_layout target module_rel_path)
 endfunction()
 
 if(BUILD_PRODUCTION)
-    add_library(udp_socket_lib
-        sil_lib/udp_socket/udp_socket.c
-    )
-    target_include_directories(udp_socket_lib
-        PUBLIC
-            ${UDP_SOCKET_ROOT}
-    )
-    target_link_libraries(udp_socket_lib
-        PUBLIC
-            ${UDP_SOCKET_PLATFORM_LIBS}
-    )
-    set_module_output_layout(udp_socket_lib "sil_lib/udp_socket")
-
     add_library(can_frame_lib
         sw/drivers/can_driver/can_frame/can_frame.c
     )
@@ -59,22 +46,6 @@ if(BUILD_PRODUCTION)
             ${CAN_FRAME_ROOT}
     )
     set_module_output_layout(can_frame_lib "drivers/can_driver/can_frame")
-
-    add_library(can_transport_udp_lib
-        sil_lib/vcan/can_transport_udp/can_transport_udp.c
-    )
-    target_include_directories(can_transport_udp_lib
-        PUBLIC
-            ${CAN_TRANSPORT_UDP_ROOT}
-            ${CAN_FRAME_ROOT}
-            ${UDP_SOCKET_ROOT}
-    )
-    target_link_libraries(can_transport_udp_lib
-        PUBLIC
-            udp_socket_lib
-            can_frame_lib
-    )
-    set_module_output_layout(can_transport_udp_lib "sil_lib/vcan/can_transport_udp")
 
     add_library(can_driver_lib
         sw/drivers/can_driver/can_driver.c
@@ -89,20 +60,6 @@ if(BUILD_PRODUCTION)
     )
     set_module_output_layout(can_driver_lib "drivers/can_driver")
 
-    add_library(io_transport_udp_lib
-        sil_lib/io/io_transport_udp/io_transport_udp.c
-    )
-    target_include_directories(io_transport_udp_lib
-        PUBLIC
-            ${IO_TRANSPORT_UDP_ROOT}
-            ${UDP_SOCKET_ROOT}
-    )
-    target_link_libraries(io_transport_udp_lib
-        PUBLIC
-            udp_socket_lib
-    )
-    set_module_output_layout(io_transport_udp_lib "sil_lib/io/io_transport_udp")
-
     add_library(io_driver_lib
         sw/drivers/io/io_driver.c
     )
@@ -112,64 +69,7 @@ if(BUILD_PRODUCTION)
     )
     set_module_output_layout(io_driver_lib "drivers/io")
 
-    add_library(sil_config_udp_socket_lib
-        sil_lib/udp_socket/sil_config_udp_socket.c
-    )
-    target_include_directories(sil_config_udp_socket_lib
-        PUBLIC
-            ${UDP_SOCKET_ROOT}
-    )
-    target_link_libraries(sil_config_udp_socket_lib
-        PUBLIC
-            udp_socket_lib
-    )
-    set_module_output_layout(sil_config_udp_socket_lib "sil_lib/udp_socket")
-
-    add_library(sil_io_config_lib
-        sil_lib/io/sil_io_config.c
-    )
-    target_include_directories(sil_io_config_lib
-        PUBLIC
-            ${SIL_IO_CONFIG_ROOT}
-    )
-    target_link_libraries(sil_io_config_lib
-        PUBLIC
-            io_driver_lib
-        PRIVATE
-            io_transport_udp_lib
-            sil_config_udp_socket_lib
-    )
-    set_module_output_layout(sil_io_config_lib "sil_lib/io")
-
-    add_library(can_emulator_lib
-        sil_lib/vcan/can_emulator/can_emulator.c
-    )
-    target_include_directories(can_emulator_lib
-        PUBLIC
-            ${SIL_VCAN_CONFIG_ROOT}/can_emulator
-    )
-    target_link_libraries(can_emulator_lib
-        PUBLIC
-            can_frame_lib
-    )
-    set_module_output_layout(can_emulator_lib "sil_lib/vcan/can_emulator")
-
-    add_library(sil_vcan_config_lib
-        sil_lib/vcan/sil_vcan_config.c
-    )
-    target_include_directories(sil_vcan_config_lib
-        PUBLIC
-            ${SIL_VCAN_CONFIG_ROOT}
-    )
-    target_link_libraries(sil_vcan_config_lib
-        PUBLIC
-            can_driver_lib
-        PRIVATE
-            can_emulator_lib
-            can_transport_udp_lib
-            sil_config_udp_socket_lib
-    )
-    set_module_output_layout(sil_vcan_config_lib "sil_lib/vcan")
+    add_subdirectory(sil_lib)
 
     add_library(pi_controller_lib
         sw/modules/pi_controller/pi_controller.c
@@ -198,6 +98,6 @@ if(BUILD_PRODUCTION)
     add_executable(implement
         sw/apps/implement/main.c
     )
-    target_link_libraries(implement PRIVATE fan_controller_lib sil_io_config_lib sil_vcan_config_lib)
+    target_link_libraries(implement PRIVATE fan_controller_lib sil_lib)
     set_module_output_layout(implement "apps/implement")
 endif()
