@@ -1,0 +1,14 @@
+/**
+ * @file sil_lib_version.h
+ * @brief SIL library version information (auto-generated — do not edit).
+ */
+
+#ifndef SIL_LIB_VERSION_H
+#define SIL_LIB_VERSION_H
+
+#define SIL_LIB_VERSION_MAJOR  @SilLib_VERSION_MAJOR @
+#define SIL_LIB_VERSION_MINOR  @SilLib_VERSION_MINOR @
+#define SIL_LIB_VERSION_PATCH  @SilLib_VERSION_PATCH @
+#define SIL_LIB_VERSION_STRING "@SilLib_VERSION@"
+
+#endif /* SIL_LIB_VERSION_H */

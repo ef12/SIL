@@ -1,3 +1,12 @@
+project(SilLib VERSION 1.0.0 LANGUAGES C)
+
+include(GNUInstallDirs)
+
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/sil_lib_version.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/sil_lib_version.h
+)
+
 add_library(sil_lib
     drivers/can_frame.c
     drivers/can_driver.c
@@ -15,6 +24,7 @@ target_include_directories(sil_lib
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/drivers>
         $<BUILD_INTERFACE:${SIL_IO_CONFIG_ROOT}>
         $<BUILD_INTERFACE:${SIL_VCAN_CONFIG_ROOT}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/sil_lib>
     PRIVATE
         ${UDP_SOCKET_ROOT}
@@ -29,7 +39,6 @@ target_link_libraries(sil_lib
 set_module_output_layout(sil_lib "sil_lib")
 
 # --- Install / Export ---------------------------------------------------
-include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
 install(TARGETS sil_lib
@@ -43,6 +52,7 @@ install(FILES
     drivers/io_driver.h
     io/sil_io_config.h
     vcan/sil_vcan_config.h
+    ${CMAKE_CURRENT_BINARY_DIR}/sil_lib_version.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/sil_lib
 )
 
