@@ -1,6 +1,6 @@
 ---
 :project:
-  :build_root: ../ceedling
+  :build_root: ../../ceedling/sil_lib
   :test_file_prefix: test_
   :use_mocks: TRUE
   :use_test_preprocessor: TRUE
@@ -8,14 +8,13 @@
 
 :paths:
   :test:
-    - ../sw/**/test
-    - ../sil_lib/**/test
+    - ../**/test
   :source:
-    - ../sw/**
-    - ../sil_lib/**
+    - ../../sw/**
+    - ../**
   :include:
-    - ../sw/**
-    - ../sil_lib/**
+    - ../../sw/**
+    - ../**
 
 :defines:
   :test:
@@ -28,6 +27,10 @@
 :cmock:
   :mock_prefix: Mock
   :when_no_prototypes: :warn
+  :plugins:
+    - :ignore
+    - :ignore_arg
+    - :expect_any_args
 
 :plugins:
   :enabled:

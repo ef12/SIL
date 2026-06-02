@@ -125,3 +125,61 @@ void test_udp_socket_mode_configuration_fails_for_invalid_inputs(void)
   TEST_ASSERT_FALSE(udp_socket_set_non_blocking(&receiver, true));
   TEST_ASSERT_FALSE(udp_socket_set_receive_timeout(&receiver, 100));
 }
+
+void test_udp_socket_init_returns_false_when_null(void)
+{
+  TEST_ASSERT_FALSE(udp_socket_init(NULL, 7110));
+}
+
+void test_udp_socket_receive_from_returns_neg1_for_null_socket(void)
+{
+  char buffer[8];
+
+  TEST_ASSERT_EQUAL_INT(-1, udp_socket_receive_from(NULL, buffer, sizeof(buffer), NULL, 0, NULL));
+}
+
+void test_udp_socket_receive_from_returns_neg1_for_null_buffer(void)
+{
+  UdpSocket sock;
+
+  TEST_ASSERT_TRUE(udp_socket_init(&sock, 7111));
+  TEST_ASSERT_EQUAL_INT(-1, udp_socket_receive_from(&sock, NULL, 8, NULL, 0, NULL));
+  udp_socket_close(&sock);
+}
+
+void test_udp_socket_receive_from_returns_neg1_when_not_initialized(void)
+{
+  UdpSocket sock;
+  char buffer[8];
+
+  sock.initialized = false;
+  sock.native_socket = 0;
+
+  TEST_ASSERT_EQUAL_INT(-1, udp_socket_receive_from(&sock, buffer, sizeof(buffer), NULL, 0, NULL));
+}
+
+void test_udp_socket_close_is_safe_when_null(void)
+{
+  udp_socket_close(NULL); /* must not crash */
+}
+
+void test_udp_socket_close_is_safe_when_not_initialized(void)
+{
+  UdpSocket sock;
+
+  sock.initialized = false;
+  sock.native_socket = 0;
+
+  udp_socket_close(&sock); /* must not crash */
+}
+
+void test_udp_socket_send_to_fails_when_not_initialized(void)
+{
+  UdpSocket sock;
+  const char payload[] = "x";
+
+  sock.initialized = false;
+  sock.native_socket = 0;
+
+  TEST_ASSERT_FALSE(udp_socket_send_to(&sock, "127.0.0.1", 7112, payload, 1));
+}

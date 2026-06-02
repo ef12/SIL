@@ -56,9 +56,9 @@
             "problemMatcher": []
         },
         {
-            "label": "Run Tests",
+            "label": "Run SW Tests",
             "type": "shell",
-            "command": "ruby -S ceedling test:all",
+            "command": "$env:CEEDLING_MAIN_PROJECT_FILE = 'project_sw.yml'; ruby -S ceedling test:all",
             "options": {
                 "cwd": "${workspaceFolder}/test"
             },
@@ -71,11 +71,11 @@
             "problemMatcher": []
         },
         {
-            "label": "Clean Tests",
+            "label": "Clean SW Tests",
             "type": "shell",
-            "command": "Set-Location test; ruby -S ceedling clobber; cmake -E rm -rf ../ceedling",
+            "command": "$env:CEEDLING_MAIN_PROJECT_FILE = 'project_sw.yml'; ruby -S ceedling clobber; cmake -E rm -rf ../ceedling/sw",
             "options": {
-                "cwd": "${workspaceFolder}"
+                "cwd": "${workspaceFolder}/test"
             },
             "presentation": {
                 "reveal": "always",
@@ -86,9 +86,39 @@
             "problemMatcher": []
         },
         {
-            "label": "Build Apps",
+            "label": "Run SIL Lib Tests",
             "type": "shell",
-            "command": "cmake --build build/meta --target can_app1 --target can_app2",
+            "command": "ruby -S ceedling test:all",
+            "options": {
+                "cwd": "${workspaceFolder}/sil_lib/test"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "Clean SIL Lib Tests",
+            "type": "shell",
+            "command": "ruby -S ceedling clobber; cmake -E rm -rf ../../ceedling/sil_lib",
+            "options": {
+                "cwd": "${workspaceFolder}/sil_lib/test"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build Implement",
+            "type": "shell",
+            "command": "cmake --build build/meta --target implement",
             "options": {
                 "cwd": "${workspaceFolder}"
             },
@@ -104,34 +134,25 @@
             ]
         },
         {
-            "label": "Run App2",
+            "label": "Build Example",
             "type": "shell",
-            "command": ".\\build\\out\\sw\\apps\\can_app2\\bin\\can_app2.exe",
+            "command": "cmake --install build/meta --prefix build/install; cmake -S examples/sil_consumer -B build/sil_consumer -G Ninja -DCMAKE_PREFIX_PATH=\"$PWD/build/install\"; cmake --build build/sil_consumer",
             "options": {
-                "cwd": "${workspaceFolder}"
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "PATH": "${env:PATH};${env:LOCALAPPDATA}\\Microsoft\\WinGet\\Packages\\Ninja-build.Ninja_Microsoft.Winget.Source_8wekyb3d8bbwe"
+                }
             },
-            "dependsOn": "Build Apps",
-            "isBackground": true,
+            "dependsOn": "Build",
+            "group": "build",
             "presentation": {
                 "reveal": "always",
-                "panel": "dedicated"
+                "panel": "shared",
+                "clear": true
             },
-            "problemMatcher": []
-        },
-        {
-            "label": "Run App1",
-            "type": "shell",
-            "command": ".\\build\\out\\sw\\apps\\can_app1\\bin\\can_app1.exe",
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "dependsOn": "Build Apps",
-            "isBackground": true,
-            "presentation": {
-                "reveal": "always",
-                "panel": "dedicated"
-            },
-            "problemMatcher": []
+            "problemMatcher": [
+                "$gcc"
+            ]
         }
     ]
 }

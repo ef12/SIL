@@ -94,3 +94,133 @@ void test_can_transport_udp_sends_and_receives_over_loopback(void)
   udp_socket_close(&receiver_socket);
   udp_socket_close(&sender_socket);
 }
+
+/* ----------------------------------------------------------------
+ *  init — additional edge cases
+ * ---------------------------------------------------------------- */
+
+void test_can_transport_udp_init_rejects_empty_ip(void)
+{
+  CanTransportUdp transport;
+  UdpSocket socket;
+
+  (void)memset(&socket, 0, sizeof(socket));
+  TEST_ASSERT_FALSE(can_transport_udp_init(&transport, &socket, "", 7210));
+}
+
+void test_can_transport_udp_init_rejects_oversized_ip(void)
+{
+  CanTransportUdp transport;
+  UdpSocket socket;
+
+  (void)memset(&socket, 0, sizeof(socket));
+  /* 16 chars = CAN_TRANSPORT_UDP_MAX_IP_LEN, must be rejected */
+  TEST_ASSERT_FALSE(can_transport_udp_init(&transport, &socket, "1234567890123456", 7211));
+}
+
+/* ----------------------------------------------------------------
+ *  encode — additional edge cases
+ * ---------------------------------------------------------------- */
+
+void test_can_transport_udp_encode_rejects_null_payload(void)
+{
+  CanFrame frame = make_frame(0x100U, NULL, 0U);
+
+  TEST_ASSERT_FALSE(can_transport_udp_encode(&frame, NULL, CAN_TRANSPORT_UDP_WIRE_SIZE));
+}
+
+void test_can_transport_udp_encode_rejects_short_buffer(void)
+{
+  uint8_t payload[CAN_TRANSPORT_UDP_WIRE_SIZE - 1U];
+  CanFrame frame = make_frame(0x100U, NULL, 0U);
+
+  TEST_ASSERT_FALSE(can_transport_udp_encode(&frame, payload, sizeof(payload)));
+}
+
+/* ----------------------------------------------------------------
+ *  decode — additional edge cases
+ * ---------------------------------------------------------------- */
+
+void test_can_transport_udp_decode_rejects_null_out_frame(void)
+{
+  uint8_t payload[CAN_TRANSPORT_UDP_WIRE_SIZE] = {0};
+
+  TEST_ASSERT_FALSE(can_transport_udp_decode(payload, sizeof(payload), NULL));
+}
+
+void test_can_transport_udp_decode_rejects_invalid_dlc_in_payload(void)
+{
+  uint8_t payload[CAN_TRANSPORT_UDP_WIRE_SIZE] = {0};
+  CanFrame out;
+
+  /* DLC = 9 in byte[4] — exceeds CAN_FRAME_MAX_DATA_LEN */
+  payload[4] = 9U;
+
+  TEST_ASSERT_FALSE(can_transport_udp_decode(payload, sizeof(payload), &out));
+}
+
+/* ----------------------------------------------------------------
+ *  receive_frame — additional edge cases
+ * ---------------------------------------------------------------- */
+
+void test_can_transport_udp_receive_frame_returns_false_when_null_transport(void)
+{
+  CanFrame out;
+
+  TEST_ASSERT_FALSE(can_transport_udp_receive_frame(NULL, &out, NULL, 0, NULL));
+}
+
+void test_can_transport_udp_receive_frame_returns_false_when_null_out_frame(void)
+{
+  UdpSocket socket;
+  CanTransportUdp transport;
+
+  TEST_ASSERT_TRUE(udp_socket_init(&socket, 7220));
+  TEST_ASSERT_TRUE(can_transport_udp_init(&transport, &socket, "127.0.0.1", 7221));
+
+  TEST_ASSERT_FALSE(can_transport_udp_receive_frame(&transport, NULL, NULL, 0, NULL));
+
+  udp_socket_close(&socket);
+}
+
+void test_can_transport_udp_receive_frame_returns_false_when_no_data(void)
+{
+  UdpSocket socket;
+  CanTransportUdp transport;
+  CanFrame out;
+
+  TEST_ASSERT_TRUE(udp_socket_init(&socket, 7222));
+  TEST_ASSERT_TRUE(udp_socket_set_non_blocking(&socket, true));
+  TEST_ASSERT_TRUE(can_transport_udp_init(&transport, &socket, "127.0.0.1", 7223));
+
+  TEST_ASSERT_FALSE(can_transport_udp_receive_frame(&transport, &out, NULL, 0, NULL));
+
+  udp_socket_close(&socket);
+}
+
+/* ----------------------------------------------------------------
+ *  send_frame — uninitialised transport
+ * ---------------------------------------------------------------- */
+
+void test_can_transport_udp_send_frame_fails_when_not_initialized(void)
+{
+  CanTransportUdp transport;
+  CanFrame frame = make_frame(0x100U, NULL, 0U);
+
+  (void)memset(&transport, 0, sizeof(transport));
+  transport.initialized = false;
+
+  TEST_ASSERT_FALSE(can_transport_udp_send_frame(&transport, &frame));
+}
+
+void test_can_transport_udp_send_frame_fails_with_null_socket(void)
+{
+  CanTransportUdp transport;
+  CanFrame frame = make_frame(0x100U, NULL, 0U);
+
+  (void)memset(&transport, 0, sizeof(transport));
+  transport.initialized = true;
+  transport.socket = NULL;
+
+  TEST_ASSERT_FALSE(can_transport_udp_send_frame(&transport, &frame));
+}
