@@ -101,3 +101,19 @@ if(BUILD_PRODUCTION)
     target_link_libraries(implement PRIVATE fan_controller_lib sil_lib)
     set_module_output_layout(implement "apps/implement")
 endif()
+
+# --- CPack --------------------------------------------------------------
+set(CPACK_PACKAGE_NAME "SilLib")
+set(CPACK_PACKAGE_VERSION ${SIL_LIB_VERSION})
+
+if(WIN32)
+    set(CPACK_GENERATOR "ZIP")
+    set(CPACK_SYSTEM_NAME "win64")
+else()
+    set(CPACK_GENERATOR "TGZ")
+    set(CPACK_SYSTEM_NAME "linux-x86_64")
+endif()
+
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+
+include(CPack)

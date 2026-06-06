@@ -1,5 +1,7 @@
 project(SilLib VERSION 1.0.0 LANGUAGES C)
 
+set(SIL_LIB_VERSION ${PROJECT_VERSION} PARENT_SCOPE)
+
 include(GNUInstallDirs)
 
 configure_file(

@@ -89,6 +89,38 @@ Run the application and GUI:
 python tools\io_gui.py
 ```
 
+## Packaging
+
+CPack produces a distributable archive containing the SilLib library,
+public headers, and CMake package-config files.
+
+```powershell
+# Build first (if not already done)
+cmake --build build/meta
+
+# Create the archive
+cd build/meta
+cpack
+```
+
+This produces `SilLib-1.0.0-win64.zip` on Windows or
+`SilLib-1.0.0-linux-x86_64.tar.gz` on Linux.
+
+To consume the package in another project:
+
+```powershell
+# Unpack
+Expand-Archive SilLib-1.0.0-win64.zip -DestinationPath SilLib
+
+# Configure consumer, pointing at the unpacked tree
+cmake -S <consumer_src> -B <consumer_build> -G Ninja `
+      -DCMAKE_PREFIX_PATH="$PWD/SilLib/SilLib-1.0.0-win64"
+cmake --build <consumer_build>
+```
+
+See [examples/sil_consumer/README.md](examples/sil_consumer/README.md) for a
+complete consumer example.
+
 ## Quick Start (Unit Tests)
 
 ```powershell

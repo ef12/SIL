@@ -16,9 +16,28 @@ cmake --install build/meta --prefix build/install
 
 ## Build
 
+### Option A — from a local install
+
 ```powershell
 cmake -S examples/sil_consumer -B build/sil_consumer -G Ninja `
       -DCMAKE_PREFIX_PATH="$PWD/build/install"
+cmake --build build/sil_consumer
+```
+
+### Option B — from a CPack package
+
+```powershell
+# Produce the archive (from the repository root)
+cd build/meta
+cpack
+cd ../..
+
+# Unpack
+Expand-Archive build\meta\SilLib-1.0.0-win64.zip -DestinationPath build\pkg
+
+# Build the consumer against the unpacked package
+cmake -S examples/sil_consumer -B build/sil_consumer -G Ninja `
+      -DCMAKE_PREFIX_PATH="$PWD/build/pkg/SilLib-1.0.0-win64"
 cmake --build build/sil_consumer
 ```
 
