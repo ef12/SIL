@@ -81,3 +81,18 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/SilLibConfigVersion.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/SilLib
 )
+
+install(FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/README.md
+    ${CMAKE_CURRENT_SOURCE_DIR}/../docs/INTEGRATION.md
+    DESTINATION ${CMAKE_INSTALL_DOCDIR}
+)
+
+install(FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/SDD_sil_lib.md
+    ${CMAKE_CURRENT_SOURCE_DIR}/io/SDD_sil_io.md
+    ${CMAKE_CURRENT_SOURCE_DIR}/vcan/SDD_sil_vcan.md
+    ${CMAKE_CURRENT_SOURCE_DIR}/udp_socket/SDD_sil_udp_socket.md
+    ${CMAKE_CURRENT_SOURCE_DIR}/vcan/can_emulator/SDD_sil_can_emulator.md
+    DESTINATION ${CMAKE_INSTALL_DOCDIR}/design
+)
