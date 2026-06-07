@@ -328,10 +328,41 @@ void test_driver_send_returns_false_when_transport_send_fails(void)
 }
 
 /* ----------------------------------------------------------------
- *  Driver receive — happy path
+ *  Driver receive — happy path with one incoming UDP frame
  * ---------------------------------------------------------------- */
 
 void test_driver_receive_pulls_from_transport_and_emulator(void)
+{
+  SilVcanConfig sil = {0};
+  CanDriver *driver;
+  CanFrame out;
+
+  stub_all_init_success();
+  TEST_ASSERT_TRUE(sil_vcan_config_init(&sil, &DEFAULT_PARAMS));
+  driver = sil_vcan_config_get_driver(&sil);
+
+  /* One UDP frame received, submitted to emulator. */
+  can_transport_udp_receive_frame_ExpectAnyArgsAndReturn(true);
+  can_emulator_submit_ExpectAnyArgsAndReturn(true);
+
+  /* Step: one arbitration round. */
+  can_emulator_step_ExpectAnyArgsAndReturn(true);
+  can_emulator_step_ExpectAnyArgsAndReturn(false);
+
+  /* Dequeue one frame for local node succeeds. */
+  can_emulator_receive_ExpectAnyArgsAndReturn(true);
+
+  TEST_ASSERT_TRUE(driver->receive(driver, &out));
+
+  stub_cleanup();
+  sil_vcan_config_deinit(&sil);
+}
+
+/* ----------------------------------------------------------------
+ *  Driver receive — no UDP data, but queued frame available
+ * ---------------------------------------------------------------- */
+
+void test_driver_receive_dequeues_without_udp(void)
 {
   SilVcanConfig sil = {0};
   CanDriver *driver;
@@ -371,37 +402,6 @@ void test_driver_receive_returns_false_when_no_frames(void)
   driver = sil_vcan_config_get_driver(&sil);
 
   can_transport_udp_receive_frame_ExpectAnyArgsAndReturn(false);
-  can_emulator_step_ExpectAnyArgsAndReturn(false);
-  can_emulator_receive_ExpectAnyArgsAndReturn(false);
-
-  TEST_ASSERT_FALSE(driver->receive(driver, &out));
-
-  stub_cleanup();
-  sil_vcan_config_deinit(&sil);
-}
-
-/* ----------------------------------------------------------------
- *  Driver receive — UDP submit break path
- * ---------------------------------------------------------------- */
-
-void test_driver_receive_stops_injecting_when_submit_fails(void)
-{
-  SilVcanConfig sil = {0};
-  CanDriver *driver;
-  CanFrame out;
-
-  stub_all_init_success();
-  TEST_ASSERT_TRUE(sil_vcan_config_init(&sil, &DEFAULT_PARAMS));
-  driver = sil_vcan_config_get_driver(&sil);
-
-  /* Both UDP frames pulled into buffer first, then submitted. */
-  can_transport_udp_receive_frame_ExpectAnyArgsAndReturn(true);
-  can_transport_udp_receive_frame_ExpectAnyArgsAndReturn(true);
-  can_transport_udp_receive_frame_ExpectAnyArgsAndReturn(false);
-
-  can_emulator_submit_ExpectAnyArgsAndReturn(true);
-  can_emulator_submit_ExpectAnyArgsAndReturn(false);
-
   can_emulator_step_ExpectAnyArgsAndReturn(false);
   can_emulator_receive_ExpectAnyArgsAndReturn(false);
 

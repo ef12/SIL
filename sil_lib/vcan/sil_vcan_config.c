@@ -162,32 +162,28 @@ static bool sil_can_send(const CanDriver *self, const CanFrame *frame)
 }
 
 /*
- * Receive: recvfrom (may block) outside the lock, then
+ * Receive: recvfrom one frame (may block) outside the lock, then
  * lock → submit + step + dequeue → unlock.
+ *
+ * Only one UDP datagram is pulled per call so that the caller sees each
+ * frame individually — important for ISOBUS TP/ETP flow control where
+ * timely processing of every CTS / DPO matters.
  */
 static bool sil_can_receive(CanDriver *self, CanFrame *out_frame)
 {
   SilCanDriver *sil = can_to_sil(self);
-  CanFrame incoming_buf[16];
-  size_t incoming_count = 0U;
+  CanFrame incoming;
+  bool got_udp;
   bool result;
 
-  /* Pull UDP frames — socket I/O outside the lock. */
-  while (incoming_count < (sizeof(incoming_buf) / sizeof(incoming_buf[0]))
-         && can_transport_udp_receive_frame(sil->transport, &incoming_buf[incoming_count], NULL, 0U,
-                                            NULL))
-  {
-    incoming_count++;
-  }
+  /* Pull one UDP frame — socket I/O outside the lock. */
+  got_udp = can_transport_udp_receive_frame(sil->transport, &incoming, NULL, 0U, NULL);
 
   sil_mutex_lock(&sil->owner->mutex);
 
-  for (size_t i = 0U; i < incoming_count; i++)
+  if (got_udp)
   {
-    if (!can_emulator_submit(sil->emulator, REMOTE_NODE_ID, &incoming_buf[i]))
-    {
-      break;
-    }
+    (void)can_emulator_submit(sil->emulator, REMOTE_NODE_ID, &incoming);
   }
 
   while (can_emulator_step(sil->emulator))
