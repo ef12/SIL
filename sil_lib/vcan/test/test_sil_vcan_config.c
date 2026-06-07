@@ -35,6 +35,7 @@ static const SilVcanConfigParams DEFAULT_PARAMS = {
     .timeout_ms = 100U,
     .max_pending_tx = 16U,
     .max_rx_queue = 16U,
+    .use_emulator = true,
 };
 
 /**
@@ -398,6 +399,102 @@ void test_driver_receive_stops_injecting_when_submit_fails(void)
 
   can_emulator_step_ExpectAnyArgsAndReturn(false);
   can_emulator_receive_ExpectAnyArgsAndReturn(false);
+
+  TEST_ASSERT_FALSE(driver->receive(driver, &out));
+
+  stub_cleanup();
+  sil_vcan_config_deinit(&sil);
+}
+
+/* ================================================================
+ *  Direct mode (use_emulator = false) — no emulator, just UDP
+ * ================================================================ */
+
+static const SilVcanConfigParams DIRECT_PARAMS = {
+    .local_port = 6000U,
+    .remote_ip = "127.0.0.1",
+    .remote_port = 6001U,
+    .timeout_ms = 100U,
+    .max_pending_tx = 0U,
+    .max_rx_queue = 0U,
+    .use_emulator = false,
+};
+
+void test_direct_init_succeeds_without_emulator(void)
+{
+  SilVcanConfig sil = {0};
+  CanDriver *driver;
+
+  sil_config_udp_socket_init_IgnoreAndReturn(true);
+  can_transport_udp_init_IgnoreAndReturn(true);
+
+  TEST_ASSERT_TRUE(sil_vcan_config_init(&sil, &DIRECT_PARAMS));
+  TEST_ASSERT_TRUE(sil.initialized);
+
+  driver = sil_vcan_config_get_driver(&sil);
+  TEST_ASSERT_NOT_NULL(driver);
+  TEST_ASSERT_TRUE(driver->initialized);
+  TEST_ASSERT_NOT_NULL(driver->send);
+  TEST_ASSERT_NOT_NULL(driver->receive);
+
+  stub_cleanup();
+  sil_vcan_config_deinit(&sil);
+}
+
+void test_direct_send_goes_straight_to_transport(void)
+{
+  SilVcanConfig sil = {0};
+  CanDriver *driver;
+  CanFrame frame;
+
+  sil_config_udp_socket_init_IgnoreAndReturn(true);
+  can_transport_udp_init_IgnoreAndReturn(true);
+  TEST_ASSERT_TRUE(sil_vcan_config_init(&sil, &DIRECT_PARAMS));
+  driver = sil_vcan_config_get_driver(&sil);
+
+  can_frame_clear(&frame);
+  frame.id = 0x100U;
+  frame.dlc = 2U;
+
+  can_transport_udp_send_frame_ExpectAnyArgsAndReturn(true);
+
+  TEST_ASSERT_TRUE(driver->send(driver, &frame));
+
+  stub_cleanup();
+  sil_vcan_config_deinit(&sil);
+}
+
+void test_direct_receive_goes_straight_to_transport(void)
+{
+  SilVcanConfig sil = {0};
+  CanDriver *driver;
+  CanFrame out;
+
+  sil_config_udp_socket_init_IgnoreAndReturn(true);
+  can_transport_udp_init_IgnoreAndReturn(true);
+  TEST_ASSERT_TRUE(sil_vcan_config_init(&sil, &DIRECT_PARAMS));
+  driver = sil_vcan_config_get_driver(&sil);
+
+  can_transport_udp_receive_frame_ExpectAnyArgsAndReturn(true);
+
+  TEST_ASSERT_TRUE(driver->receive(driver, &out));
+
+  stub_cleanup();
+  sil_vcan_config_deinit(&sil);
+}
+
+void test_direct_receive_returns_false_when_no_data(void)
+{
+  SilVcanConfig sil = {0};
+  CanDriver *driver;
+  CanFrame out;
+
+  sil_config_udp_socket_init_IgnoreAndReturn(true);
+  can_transport_udp_init_IgnoreAndReturn(true);
+  TEST_ASSERT_TRUE(sil_vcan_config_init(&sil, &DIRECT_PARAMS));
+  driver = sil_vcan_config_get_driver(&sil);
+
+  can_transport_udp_receive_frame_ExpectAnyArgsAndReturn(false);
 
   TEST_ASSERT_FALSE(driver->receive(driver, &out));
 

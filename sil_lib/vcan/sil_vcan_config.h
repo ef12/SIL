@@ -29,6 +29,10 @@ typedef struct
   uint32_t timeout_ms;
   size_t max_pending_tx;
   size_t max_rx_queue;
+  /** When true, frames pass through the CAN bus emulator (arbitration,
+   *  TX/RX queuing).  When false, frames go directly over UDP — this is
+   *  thread-safe and suited for cross-process communication. */
+  bool use_emulator;
 } SilVcanConfigParams;
 
 /** Opaque SIL virtual CAN state. */

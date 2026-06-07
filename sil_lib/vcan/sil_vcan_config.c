@@ -93,6 +93,26 @@ static bool sil_can_receive(CanDriver *self, CanFrame *out_frame)
 }
 
 /* ================================================================
+ *  Direct-UDP callbacks — bypass the emulator entirely.
+ *  sendto / recvfrom on the same socket are thread-safe, so these
+ *  can be called concurrently from different threads.
+ * ================================================================ */
+
+static bool sil_can_send_direct(const CanDriver *self, const CanFrame *frame)
+{
+  const SilCanDriver *sil = can_to_sil_const(self);
+
+  return can_transport_udp_send_frame(sil->transport, frame);
+}
+
+static bool sil_can_receive_direct(CanDriver *self, CanFrame *out_frame)
+{
+  SilCanDriver *sil = can_to_sil(self);
+
+  return can_transport_udp_receive_frame(sil->transport, out_frame, NULL, 0U, NULL);
+}
+
+/* ================================================================
  *  SIL vCAN internal state — owns everything.
  * ================================================================ */
 
@@ -148,28 +168,37 @@ bool sil_vcan_config_init(SilVcanConfig *sil, const SilVcanConfigParams *params)
     return false;
   }
 
-  /* Initialize the CAN bus emulator with local and remote nodes. */
-  if (!can_emulator_init(&si->emulator, &emu_cfg))
+  if (params->use_emulator)
   {
-    cleanup(si);
-    return false;
-  }
+    /* Initialize the CAN bus emulator with local and remote nodes. */
+    if (!can_emulator_init(&si->emulator, &emu_cfg))
+    {
+      cleanup(si);
+      return false;
+    }
 
-  if (!can_emulator_register_node(&si->emulator, LOCAL_NODE_ID))
-  {
-    cleanup(si);
-    return false;
-  }
+    if (!can_emulator_register_node(&si->emulator, LOCAL_NODE_ID))
+    {
+      cleanup(si);
+      return false;
+    }
 
-  if (!can_emulator_register_node(&si->emulator, REMOTE_NODE_ID))
+    if (!can_emulator_register_node(&si->emulator, REMOTE_NODE_ID))
+    {
+      cleanup(si);
+      return false;
+    }
+
+    si->driver.base.send = sil_can_send;
+    si->driver.base.receive = sil_can_receive;
+  }
+  else
   {
-    cleanup(si);
-    return false;
+    si->driver.base.send = sil_can_send_direct;
+    si->driver.base.receive = sil_can_receive_direct;
   }
 
   /* Wire up the SIL CAN driver. */
-  si->driver.base.send = sil_can_send;
-  si->driver.base.receive = sil_can_receive;
   si->driver.base.close = NULL;
   si->driver.base.initialized = true;
   si->driver.emulator = &si->emulator;
