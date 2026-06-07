@@ -506,26 +506,6 @@ Robot Framework scenarios will validate end-to-end behavior:
 | IO CLI | — | Planned |
 | Robot Framework Test Architecture SDD | — | Planned |
 
-## 15. Roadmap
-
-1. ~~Define stable interfaces for core modules~~ (done)
-2. ~~Implement minimal implement app with IO and CAN~~ (done)
-3. ~~Implement Manual Tester GUI with UDP protocol adapter~~ (done)
-4. Implement IO CLI abstraction layer for consumer-side IO access
-5. Migrate Manual Tester GUI to use IO CLI instead of raw UDP
-6. Implement VT simulator integration including object-pool upload handling
-7. Implement ISOBUS services module
-8. Implement Robot Framework end-to-end test suites (using IO CLI)
-9. Package SIL library as single static archive with public headers
-
-## 16. Future Extensions
-
-- Replace UDP transport with real CAN hardware transport
-- Add richer implement behavior and fault handling
-- Support additional implement types in the same SIL framework
-- Add logging/replay and fault injection for regression testing
-- CI pipeline integration with automated SIL test execution
-
 ---
 
 ## Appendix A: Benefits of the SIL System
