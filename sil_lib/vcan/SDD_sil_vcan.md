@@ -86,7 +86,20 @@ Unlike the IO subsystem, CAN uses **polled receive** — the application calls
 `can_driver_receive()` in its main loop. No background thread is used.
 The socket timeout controls how long each receive call blocks.
 
-### 3.5 Send Flow
+### 3.5 Thread Safety
+
+Each `SilVcanInternal` instance contains a platform mutex (CRITICAL_SECTION on
+Windows, `pthread_mutex_t` on POSIX). The locking discipline ensures:
+
+- **Socket I/O is never performed inside the lock.** `sendto` and `recvfrom`
+  run outside the critical section to avoid blocking other threads.
+- **Emulator state is always accessed under the lock.** Submit, step, and
+  receive operations on the `CanEmulator` are serialized.
+
+This allows safe concurrent calls to `can_driver_send()` and
+`can_driver_receive()` from different threads on the same bus instance.
+
+### 3.6 Send Flow
 
 ```mermaid
 sequenceDiagram
@@ -111,7 +124,7 @@ sequenceDiagram
     Drv-->>App: true
 ```
 
-### 3.6 Receive Flow
+### 3.7 Receive Flow
 
 ```mermaid
 sequenceDiagram
@@ -122,9 +135,9 @@ sequenceDiagram
     participant Peer as Remote Peer
 
     App->>Drv: can_driver_receive(&out_frame)
-    loop Pull all from UDP
-        Peer->>UDP: UDP datagram
-        Drv->>UDP: can_transport_udp_receive_frame(&incoming)
+    Peer->>UDP: UDP datagram
+    Drv->>UDP: can_transport_udp_receive_frame(&incoming)
+    alt Frame received
         Drv->>Emu: can_emulator_submit(REMOTE, &incoming)
         Note over Emu: Injected as remote-node frame
     end
@@ -137,8 +150,11 @@ sequenceDiagram
     Drv-->>App: true + out_frame
 ```
 
-If multiple frames arrive from the peer simultaneously, the emulator delivers
-them in CAN arbitration order, not raw UDP arrival order.
+Only **one** UDP datagram is pulled per call so that the caller sees each
+frame individually — important for ISOBUS TP/ETP flow control where timely
+processing of every CTS / DPO matters. If multiple frames are pending in the
+socket buffer, they are delivered across successive `can_driver_receive()` calls
+in CAN arbitration order.
 
 ## 4. Usage
 
