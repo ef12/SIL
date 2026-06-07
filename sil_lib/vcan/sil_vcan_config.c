@@ -11,6 +11,12 @@
 
 #include <stdlib.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <pthread.h>
+#endif
+
 /* ================================================================
  *  Internal node IDs for the emulated CAN bus.
  * ================================================================ */
@@ -22,11 +28,14 @@
  *  SIL CAN driver — extends CanDriver with emulator + transport.
  * ================================================================ */
 
+typedef struct SilVcanInternal SilVcanInternal;
+
 typedef struct
 {
   CanDriver base;
   CanEmulator *emulator;
   CanTransportUdp *transport;
+  SilVcanInternal *owner;
 } SilCanDriver;
 
 static SilCanDriver *can_to_sil(CanDriver *self)
@@ -39,90 +48,60 @@ static const SilCanDriver *can_to_sil_const(const CanDriver *self)
   return (const SilCanDriver *)self;
 }
 
-static bool sil_can_send(const CanDriver *self, const CanFrame *frame)
-{
-  const SilCanDriver *sil = can_to_sil_const(self);
-  CanFrame routed;
-
-  /* Submit frame into the emulator TX queue. */
-  if (!can_emulator_submit(sil->emulator, LOCAL_NODE_ID, frame))
-  {
-    return false;
-  }
-
-  /* Run arbitration — route all pending frames. */
-  while (can_emulator_step(sil->emulator))
-  {
-    /* intentionally empty */
-  }
-
-  /* Drain the remote node's RX queue and forward over UDP. */
-  while (can_emulator_receive(sil->emulator, REMOTE_NODE_ID, &routed, NULL))
-  {
-    if (!can_transport_udp_send_frame(sil->transport, &routed))
-    {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-static bool sil_can_receive(CanDriver *self, CanFrame *out_frame)
-{
-  SilCanDriver *sil = can_to_sil(self);
-  CanFrame incoming;
-
-  /* Pull any frames from UDP and inject as remote-node submissions. */
-  while (can_transport_udp_receive_frame(sil->transport, &incoming, NULL, 0U, NULL))
-  {
-    if (!can_emulator_submit(sil->emulator, REMOTE_NODE_ID, &incoming))
-    {
-      break;
-    }
-  }
-
-  /* Run arbitration — route all pending frames. */
-  while (can_emulator_step(sil->emulator))
-  {
-    /* intentionally empty */
-  }
-
-  /* Dequeue one frame from the local node's RX queue. */
-  return can_emulator_receive(sil->emulator, LOCAL_NODE_ID, out_frame, NULL);
-}
-
 /* ================================================================
- *  Direct-UDP callbacks — bypass the emulator entirely.
- *  sendto / recvfrom on the same socket are thread-safe, so these
- *  can be called concurrently from different threads.
+ *  Platform mutex helpers.
  * ================================================================ */
 
-static bool sil_can_send_direct(const CanDriver *self, const CanFrame *frame)
+#ifdef _WIN32
+typedef CRITICAL_SECTION SilMutex;
+static void sil_mutex_init(SilMutex *m)
 {
-  const SilCanDriver *sil = can_to_sil_const(self);
-
-  return can_transport_udp_send_frame(sil->transport, frame);
+  InitializeCriticalSection(m);
 }
-
-static bool sil_can_receive_direct(CanDriver *self, CanFrame *out_frame)
+static void sil_mutex_lock(SilMutex *m)
 {
-  SilCanDriver *sil = can_to_sil(self);
-
-  return can_transport_udp_receive_frame(sil->transport, out_frame, NULL, 0U, NULL);
+  EnterCriticalSection(m);
 }
+static void sil_mutex_unlock(SilMutex *m)
+{
+  LeaveCriticalSection(m);
+}
+static void sil_mutex_destroy(SilMutex *m)
+{
+  DeleteCriticalSection(m);
+}
+#else
+typedef pthread_mutex_t SilMutex;
+static void sil_mutex_init(SilMutex *m)
+{
+  pthread_mutex_init(m, NULL);
+}
+static void sil_mutex_lock(SilMutex *m)
+{
+  pthread_mutex_lock(m);
+}
+static void sil_mutex_unlock(SilMutex *m)
+{
+  pthread_mutex_unlock(m);
+}
+static void sil_mutex_destroy(SilMutex *m)
+{
+  pthread_mutex_destroy(m);
+}
+#endif
 
 /* ================================================================
  *  SIL vCAN internal state — owns everything.
  * ================================================================ */
 
-typedef struct
+struct SilVcanInternal
 {
   UdpSocket socket;
   CanTransportUdp transport;
   CanEmulator emulator;
   SilCanDriver driver;
-} SilVcanInternal;
+  SilMutex mutex;
+};
 
 static void cleanup(SilVcanInternal *si)
 {
@@ -132,8 +111,95 @@ static void cleanup(SilVcanInternal *si)
   }
 
   can_emulator_deinit(&si->emulator);
+  sil_mutex_destroy(&si->mutex);
   udp_socket_close(&si->socket);
   free(si);
+}
+
+/*
+ * Send: lock → submit + step + drain emulator → unlock → send over UDP.
+ * The socket I/O (sendto) is never inside the lock.
+ */
+static bool sil_can_send(const CanDriver *self, const CanFrame *frame)
+{
+  const SilCanDriver *sil = can_to_sil_const(self);
+  CanFrame drain_buf[16];
+  size_t drain_count = 0U;
+  bool ok = true;
+
+  sil_mutex_lock(&sil->owner->mutex);
+
+  if (!can_emulator_submit(sil->emulator, LOCAL_NODE_ID, frame))
+  {
+    sil_mutex_unlock(&sil->owner->mutex);
+    return false;
+  }
+
+  while (can_emulator_step(sil->emulator))
+  {
+    /* intentionally empty */
+  }
+
+  while (drain_count < (sizeof(drain_buf) / sizeof(drain_buf[0]))
+         && can_emulator_receive(sil->emulator, REMOTE_NODE_ID, &drain_buf[drain_count], NULL))
+  {
+    drain_count++;
+  }
+
+  sil_mutex_unlock(&sil->owner->mutex);
+
+  /* Forward drained frames over UDP — outside the lock. */
+  for (size_t i = 0U; i < drain_count; i++)
+  {
+    if (!can_transport_udp_send_frame(sil->transport, &drain_buf[i]))
+    {
+      ok = false;
+      break;
+    }
+  }
+
+  return ok;
+}
+
+/*
+ * Receive: recvfrom (may block) outside the lock, then
+ * lock → submit + step + dequeue → unlock.
+ */
+static bool sil_can_receive(CanDriver *self, CanFrame *out_frame)
+{
+  SilCanDriver *sil = can_to_sil(self);
+  CanFrame incoming_buf[16];
+  size_t incoming_count = 0U;
+  bool result;
+
+  /* Pull UDP frames — socket I/O outside the lock. */
+  while (incoming_count < (sizeof(incoming_buf) / sizeof(incoming_buf[0]))
+         && can_transport_udp_receive_frame(sil->transport, &incoming_buf[incoming_count], NULL, 0U,
+                                            NULL))
+  {
+    incoming_count++;
+  }
+
+  sil_mutex_lock(&sil->owner->mutex);
+
+  for (size_t i = 0U; i < incoming_count; i++)
+  {
+    if (!can_emulator_submit(sil->emulator, REMOTE_NODE_ID, &incoming_buf[i]))
+    {
+      break;
+    }
+  }
+
+  while (can_emulator_step(sil->emulator))
+  {
+    /* intentionally empty */
+  }
+
+  result = can_emulator_receive(sil->emulator, LOCAL_NODE_ID, out_frame, NULL);
+
+  sil_mutex_unlock(&sil->owner->mutex);
+
+  return result;
 }
 
 bool sil_vcan_config_init(SilVcanConfig *sil, const SilVcanConfigParams *params)
@@ -168,41 +234,35 @@ bool sil_vcan_config_init(SilVcanConfig *sil, const SilVcanConfigParams *params)
     return false;
   }
 
-  if (params->use_emulator)
+  /* Initialize the CAN bus emulator with local and remote nodes. */
+  if (!can_emulator_init(&si->emulator, &emu_cfg))
   {
-    /* Initialize the CAN bus emulator with local and remote nodes. */
-    if (!can_emulator_init(&si->emulator, &emu_cfg))
-    {
-      cleanup(si);
-      return false;
-    }
-
-    if (!can_emulator_register_node(&si->emulator, LOCAL_NODE_ID))
-    {
-      cleanup(si);
-      return false;
-    }
-
-    if (!can_emulator_register_node(&si->emulator, REMOTE_NODE_ID))
-    {
-      cleanup(si);
-      return false;
-    }
-
-    si->driver.base.send = sil_can_send;
-    si->driver.base.receive = sil_can_receive;
+    cleanup(si);
+    return false;
   }
-  else
+
+  if (!can_emulator_register_node(&si->emulator, LOCAL_NODE_ID))
   {
-    si->driver.base.send = sil_can_send_direct;
-    si->driver.base.receive = sil_can_receive_direct;
+    cleanup(si);
+    return false;
   }
+
+  if (!can_emulator_register_node(&si->emulator, REMOTE_NODE_ID))
+  {
+    cleanup(si);
+    return false;
+  }
+
+  sil_mutex_init(&si->mutex);
 
   /* Wire up the SIL CAN driver. */
+  si->driver.base.send = sil_can_send;
+  si->driver.base.receive = sil_can_receive;
   si->driver.base.close = NULL;
   si->driver.base.initialized = true;
   si->driver.emulator = &si->emulator;
   si->driver.transport = &si->transport;
+  si->driver.owner = si;
 
   sil->internal = si;
   sil->initialized = true;

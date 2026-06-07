@@ -45,7 +45,6 @@ int main(void)
       .timeout_ms = 1U, /* non-blocking poll */
       .max_pending_tx = 16U,
       .max_rx_queue = 16U,
-      .use_emulator = false, /* direct UDP — thread-safe */
   };
 
   if (!sil_io_config_init(&sil_io, &io_params))
