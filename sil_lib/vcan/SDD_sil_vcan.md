@@ -153,10 +153,12 @@ This allocates and wires together the internal components:
 SilVcanConfig sil_can = {0};
 
 SilVcanConfigParams params = {
-    .local_port  = 7401,
-    .remote_ip   = "127.0.0.1",
-    .remote_port = 7402,
-    .timeout_ms  = 1,    /* non-blocking poll */
+    .local_port      = 7401,
+    .remote_ip       = "127.0.0.1",
+    .remote_port     = 7402,
+    .timeout_ms      = 1,    /* non-blocking poll */
+    .max_pending_tx  = 16,
+    .max_rx_queue    = 16,
 };
 
 sil_vcan_config_init(&sil_can, &params);
@@ -189,20 +191,24 @@ multiple CAN controllers, create one instance per bus:
 /*  BUS 1 — engine sensors  */
 SilVcanConfig sil_can1 = {0};
 SilVcanConfigParams bus1_params = {
-    .local_port  = 7401,
-    .remote_ip   = "127.0.0.1",
-    .remote_port = 7402,
-    .timeout_ms  = 1,
+    .local_port      = 7401,
+    .remote_ip       = "127.0.0.1",
+    .remote_port     = 7402,
+    .timeout_ms      = 1,
+    .max_pending_tx  = 16,
+    .max_rx_queue    = 16,
 };
 sil_vcan_config_init(&sil_can1, &bus1_params);
 
 /*  BUS 2 — body network  */
 SilVcanConfig sil_can2 = {0};
 SilVcanConfigParams bus2_params = {
-    .local_port  = 7403,
-    .remote_ip   = "127.0.0.1",
-    .remote_port = 7404,
-    .timeout_ms  = 1,
+    .local_port      = 7403,
+    .remote_ip       = "127.0.0.1",
+    .remote_port     = 7404,
+    .timeout_ms      = 1,
+    .max_pending_tx  = 16,
+    .max_rx_queue    = 16,
 };
 sil_vcan_config_init(&sil_can2, &bus2_params);
 
@@ -327,8 +333,9 @@ compile-time size limits.
 See [SDD_sil_can_emulator.md](can_emulator/SDD_sil_can_emulator.md) for full
 design details.
 
-The vCAN config layer creates the emulator with a minimal configuration
-suited for point-to-point communication (2 nodes, 16-deep queues).
+The vCAN config layer creates the emulator with 2 nodes (LOCAL and REMOTE).
+The TX and RX queue depths are caller-configurable via
+`max_pending_tx` and `max_rx_queue` in `SilVcanConfigParams`.
 
 ## 7. Configuration Reference
 
@@ -340,6 +347,8 @@ suited for point-to-point communication (2 nodes, 16-deep queues).
 | `remote_ip` | `const char*` | Peer IPv4 address (e.g. `"127.0.0.1"`) |
 | `remote_port` | `uint16_t` | Peer UDP port |
 | `timeout_ms` | `uint32_t` | Socket receive timeout; use `1` for non-blocking poll |
+| `max_pending_tx` | `size_t` | Maximum pending TX frames awaiting arbitration |
+| `max_rx_queue` | `size_t` | Maximum receive queue depth per emulator node |
 
 ## 8. API Reference
 

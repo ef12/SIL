@@ -246,10 +246,12 @@ background thread.
 SilVcanConfig vcan = {0};
 
 const SilVcanConfigParams params = {
-    .local_port  = 9000,          // This process listens here
-    .remote_ip   = "127.0.0.1",
-    .remote_port = 9001,          // Peer listens here
-    .timeout_ms  = 50,            // Receive blocks up to 50 ms
+    .local_port      = 9000,          // This process listens here
+    .remote_ip       = "127.0.0.1",
+    .remote_port     = 9001,          // Peer listens here
+    .timeout_ms      = 50,            // Receive blocks up to 50 ms
+    .max_pending_tx  = 16,            // TX queue depth
+    .max_rx_queue    = 16,            // RX queue depth per node
 };
 
 if (!sil_vcan_config_init(&vcan, &params))
@@ -264,7 +266,7 @@ if (!sil_vcan_config_init(&vcan, &params))
 1. Allocates internal state (`SilVcanInternal`)
 2. Opens a UDP socket on `local_port` with `timeout_ms` receive timeout
 3. Initializes the CAN-over-UDP transport
-4. Creates a CAN bus emulator (2 nodes, 16-deep TX/RX queues)
+4. Creates a CAN bus emulator (2 nodes, TX/RX queue depths from params)
 5. Registers LOCAL (node 0) and REMOTE (node 1) on the virtual bus
 6. Wires the `CanDriver` vtable (send/receive/close callbacks)
 
@@ -349,6 +351,7 @@ SilVcanConfig bus1 = {0};
 const SilVcanConfigParams bus1_p = {
     .local_port = 9000, .remote_ip = "127.0.0.1",
     .remote_port = 9001, .timeout_ms = 50,
+    .max_pending_tx = 16, .max_rx_queue = 16,
 };
 sil_vcan_config_init(&bus1, &bus1_p);
 
@@ -357,6 +360,7 @@ SilVcanConfig bus2 = {0};
 const SilVcanConfigParams bus2_p = {
     .local_port = 9002, .remote_ip = "127.0.0.1",
     .remote_port = 9003, .timeout_ms = 50,
+    .max_pending_tx = 16, .max_rx_queue = 16,
 };
 sil_vcan_config_init(&bus2, &bus2_p);
 
@@ -566,10 +570,12 @@ int main(void)
     // ── 1. Initialize virtual CAN bus ──────────────────────────────
     SilVcanConfig vcan = {0};
     const SilVcanConfigParams vcan_params = {
-        .local_port  = 9000,        // We listen on 9000
-        .remote_ip   = "127.0.0.1", // Peer is on localhost
-        .remote_port = 9001,        // Peer listens on 9001
-        .timeout_ms  = 20,          // 20 ms receive timeout
+        .local_port      = 9000,        // We listen on 9000
+        .remote_ip       = "127.0.0.1", // Peer is on localhost
+        .remote_port     = 9001,        // Peer listens on 9001
+        .timeout_ms      = 20,          // 20 ms receive timeout
+        .max_pending_tx  = 16,          // TX queue depth
+        .max_rx_queue    = 16,          // RX queue depth per node
     };
 
     if (!sil_vcan_config_init(&vcan, &vcan_params))

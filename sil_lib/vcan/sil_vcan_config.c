@@ -119,17 +119,16 @@ static void cleanup(SilVcanInternal *si)
 bool sil_vcan_config_init(SilVcanConfig *sil, const SilVcanConfigParams *params)
 {
   SilVcanInternal *si;
-
-  const CanEmulatorConfig emu_cfg = {
-      .max_nodes = 2U,
-      .max_pending_tx = 16U,
-      .max_rx_queue = 16U,
-  };
+  CanEmulatorConfig emu_cfg;
 
   if (sil == NULL || params == NULL || params->remote_ip == NULL)
   {
     return false;
   }
+
+  emu_cfg.max_nodes = 2U;
+  emu_cfg.max_pending_tx = params->max_pending_tx;
+  emu_cfg.max_rx_queue = params->max_rx_queue;
 
   si = (SilVcanInternal *)calloc(1U, sizeof(SilVcanInternal));
   if (si == NULL)

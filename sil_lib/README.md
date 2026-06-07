@@ -110,10 +110,12 @@ int main(void)
     /* --- Virtual CAN bus --- */
     SilVcanConfig vcan = {0};
     const SilVcanConfigParams vcan_p = {
-        .local_port  = 9000,
-        .remote_ip   = "127.0.0.1",
-        .remote_port = 9001,
-        .timeout_ms  = 50,
+        .local_port      = 9000,
+        .remote_ip       = "127.0.0.1",
+        .remote_port     = 9001,
+        .timeout_ms      = 50,
+        .max_pending_tx  = 16,
+        .max_rx_queue    = 16,
     };
     sil_vcan_config_init(&vcan, &vcan_p);
     CanDriver *can = sil_vcan_config_get_driver(&vcan);
@@ -207,8 +209,8 @@ int main(void)
 | `local_port` | `uint16_t` | UDP port this side listens on | `9000` |
 | `remote_ip` | `const char*` | IP address of the CAN peer | `"127.0.0.1"` |
 | `remote_port` | `uint16_t` | UDP port the CAN peer listens on | `9001` |
-| `timeout_ms` | `uint32_t` | Socket receive timeout in milliseconds | `50` |
-
+| `timeout_ms` | `uint32_t` | Socket receive timeout in milliseconds | `50` || `max_pending_tx` | `size_t` | Maximum pending TX frames awaiting arbitration | `16` |
+| `max_rx_queue` | `size_t` | Maximum receive queue depth per emulator node | `16` |
 ---
 
 ## Port Assignment

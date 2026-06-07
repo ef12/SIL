@@ -33,6 +33,8 @@ static const SilVcanConfigParams DEFAULT_PARAMS = {
     .remote_ip = "127.0.0.1",
     .remote_port = 6001U,
     .timeout_ms = 100U,
+    .max_pending_tx = 16U,
+    .max_rx_queue = 16U,
 };
 
 /**

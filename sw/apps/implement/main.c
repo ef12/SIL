@@ -9,7 +9,7 @@
 #define sleep_ms(ms) Sleep(ms)
 #else
 #include <unistd.h>
-#define sleep_ms(ms) usleep((ms) * 1000)
+#define sleep_ms(ms) usleep((ms)*1000)
 #endif
 
 #define IO_PORT         7501U
@@ -43,6 +43,8 @@ int main(void)
       .remote_ip = "127.0.0.1",
       .remote_port = CAN_PEER,
       .timeout_ms = 1U, /* non-blocking poll */
+      .max_pending_tx = 16U,
+      .max_rx_queue = 16U,
   };
 
   if (!sil_io_config_init(&sil_io, &io_params))

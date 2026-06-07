@@ -13,6 +13,7 @@
 #include "can_driver.h"
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -26,6 +27,8 @@ typedef struct
   const char *remote_ip;
   uint16_t remote_port;
   uint32_t timeout_ms;
+  size_t max_pending_tx;
+  size_t max_rx_queue;
 } SilVcanConfigParams;
 
 /** Opaque SIL virtual CAN state. */
