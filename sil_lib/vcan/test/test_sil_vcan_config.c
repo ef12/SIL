@@ -410,3 +410,27 @@ void test_driver_receive_returns_false_when_no_frames(void)
   stub_cleanup();
   sil_vcan_config_deinit(&sil);
 }
+
+/* ----------------------------------------------------------------
+ *  Driver receive — submit failure returns false
+ * ---------------------------------------------------------------- */
+
+void test_driver_receive_returns_false_when_submit_fails(void)
+{
+  SilVcanConfig sil = {0};
+  CanDriver *driver;
+  CanFrame out;
+
+  stub_all_init_success();
+  TEST_ASSERT_TRUE(sil_vcan_config_init(&sil, &DEFAULT_PARAMS));
+  driver = sil_vcan_config_get_driver(&sil);
+
+  /* UDP frame received, but emulator TX queue full. */
+  can_transport_udp_receive_frame_ExpectAnyArgsAndReturn(true);
+  can_emulator_submit_ExpectAnyArgsAndReturn(false);
+
+  TEST_ASSERT_FALSE(driver->receive(driver, &out));
+
+  stub_cleanup();
+  sil_vcan_config_deinit(&sil);
+}

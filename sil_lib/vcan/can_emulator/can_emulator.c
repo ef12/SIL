@@ -254,12 +254,7 @@ bool can_emulator_step(CanEmulator *emulator)
   best_index = find_best_tx_index(emulator);
   selected = emulator->pending_tx[best_index];
 
-  for (i = best_index; (i + 1U) < emulator->pending_tx_count; ++i)
-  {
-    emulator->pending_tx[i] = emulator->pending_tx[i + 1U];
-  }
-  emulator->pending_tx_count--;
-
+  /* Route to all other nodes' RX queues BEFORE removing from TX. */
   for (i = 0; i < emulator->max_nodes; ++i)
   {
     CanEmulatorNode *node = &emulator->nodes[i];
@@ -271,9 +266,17 @@ bool can_emulator_step(CanEmulator *emulator)
 
     if (!enqueue_rx(node, &selected.frame, selected.sender))
     {
+      /* RX queue full — frame stays in TX queue for retry. */
       return false;
     }
   }
+
+  /* All recipients accepted — now remove from TX queue. */
+  for (i = best_index; (i + 1U) < emulator->pending_tx_count; ++i)
+  {
+    emulator->pending_tx[i] = emulator->pending_tx[i + 1U];
+  }
+  emulator->pending_tx_count--;
 
   return true;
 }

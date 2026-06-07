@@ -35,12 +35,13 @@ void test_init_succeeds_without_timeout(void)
   UdpSocket socket;
 
   udp_socket_init_ExpectAndReturn(&socket, 5000U, true);
+  udp_socket_set_non_blocking_ExpectAndReturn(&socket, true, true);
 
   TEST_ASSERT_TRUE(sil_config_udp_socket_init(&socket, 5000U, 0U));
 }
 
 /* ----------------------------------------------------------------
- *  Happy path — with timeout
+ *  Happy path — with timeout (ignored, non-blocking used instead)
  * ---------------------------------------------------------------- */
 
 void test_init_succeeds_with_timeout(void)
@@ -48,7 +49,7 @@ void test_init_succeeds_with_timeout(void)
   UdpSocket socket;
 
   udp_socket_init_ExpectAndReturn(&socket, 5001U, true);
-  udp_socket_set_receive_timeout_ExpectAndReturn(&socket, 200U, true);
+  udp_socket_set_non_blocking_ExpectAndReturn(&socket, true, true);
 
   TEST_ASSERT_TRUE(sil_config_udp_socket_init(&socket, 5001U, 200U));
 }
@@ -67,15 +68,15 @@ void test_init_returns_false_when_socket_init_fails(void)
 }
 
 /* ----------------------------------------------------------------
- *  udp_socket_set_receive_timeout fails — socket must be closed
+ *  udp_socket_set_non_blocking fails — socket must be closed
  * ---------------------------------------------------------------- */
 
-void test_init_closes_socket_when_timeout_setup_fails(void)
+void test_init_closes_socket_when_non_blocking_setup_fails(void)
 {
   UdpSocket socket;
 
   udp_socket_init_ExpectAndReturn(&socket, 5003U, true);
-  udp_socket_set_receive_timeout_ExpectAndReturn(&socket, 50U, false);
+  udp_socket_set_non_blocking_ExpectAndReturn(&socket, true, false);
   udp_socket_close_Expect(&socket);
 
   TEST_ASSERT_FALSE(sil_config_udp_socket_init(&socket, 5003U, 50U));

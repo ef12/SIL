@@ -183,7 +183,11 @@ static bool sil_can_receive(CanDriver *self, CanFrame *out_frame)
 
   if (got_udp)
   {
-    (void)can_emulator_submit(sil->emulator, REMOTE_NODE_ID, &incoming);
+    if (!can_emulator_submit(sil->emulator, REMOTE_NODE_ID, &incoming))
+    {
+      sil_mutex_unlock(&sil->owner->mutex);
+      return false;
+    }
   }
 
   while (can_emulator_step(sil->emulator))

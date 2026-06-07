@@ -17,11 +17,12 @@ bool sil_config_udp_socket_init(UdpSocket *socket, uint16_t local_port, uint32_t
     return false;
   }
 
-  if (timeout_ms > 0U && !udp_socket_set_receive_timeout(socket, timeout_ms))
+  if (!udp_socket_set_non_blocking(socket, true))
   {
     udp_socket_close(socket);
     return false;
   }
 
+  (void)timeout_ms;
   return true;
 }

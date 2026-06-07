@@ -272,6 +272,7 @@ void test_step_returns_false_when_rx_queue_full(void)
   CanEmulator local;
   CanEmulatorConfig cfg = {.max_nodes = 2U, .max_pending_tx = 4U, .max_rx_queue = 1U};
   CanFrame frame;
+  CanFrame rx;
 
   TEST_ASSERT_TRUE(can_emulator_init(&local, &cfg));
   TEST_ASSERT_TRUE(can_emulator_register_node(&local, 1U));
@@ -281,9 +282,16 @@ void test_step_returns_false_when_rx_queue_full(void)
   TEST_ASSERT_TRUE(can_emulator_submit(&local, 1U, &frame));
   TEST_ASSERT_TRUE(can_emulator_step(&local));
 
-  /* Node 2 RX queue is now full (capacity 1). Next step should fail. */
+  /* Node 2 RX queue is now full (capacity 1). Next step should fail
+   * and the frame must remain in the TX queue (not lost). */
   TEST_ASSERT_TRUE(can_emulator_submit(&local, 1U, &frame));
   TEST_ASSERT_FALSE(can_emulator_step(&local));
+  TEST_ASSERT_EQUAL_UINT(1U, can_emulator_pending_tx_count(&local));
+
+  /* Drain the full RX queue, then retry — step should now succeed. */
+  TEST_ASSERT_TRUE(can_emulator_receive(&local, 2U, &rx, NULL));
+  TEST_ASSERT_TRUE(can_emulator_step(&local));
+  TEST_ASSERT_EQUAL_UINT(0U, can_emulator_pending_tx_count(&local));
 
   can_emulator_deinit(&local);
 }
