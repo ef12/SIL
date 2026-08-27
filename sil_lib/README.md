@@ -49,7 +49,8 @@ graph TD
     APP -- "CanDriver*" --> CAN_BSP
 
     IO_BSP --> IO_T --> SOCK_IO
-    CAN_BSP --> CAN_E --> CAN_T --> SOCK_CAN
+    CAN_BSP --> CAN_E
+    CAN_BSP --> CAN_T --> SOCK_CAN
 
     SOCK_IO <-. "UDP" .-> GUI
     SOCK_CAN <-. "UDP" .-> PEER

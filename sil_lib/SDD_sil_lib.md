@@ -143,6 +143,7 @@ flowchart TB
   subgraph SilLib["SIL Library (sil_lib)"]
     direction LR
     IO_TRANSPORT["io_transport_udp"]
+    CANCFG["sil_vcan_config"]
     CANEMU["can_emulator"]
     CAN_TRANSPORT["can_transport_udp"]
     UDP["udp_socket"]
@@ -163,8 +164,9 @@ flowchart TB
   VT --> CAN_DRV
 
   IO_DRV --> IO_TRANSPORT
-  CAN_DRV --> CANEMU
-  CANEMU --> CAN_TRANSPORT
+  CAN_DRV --> CANCFG
+  CANCFG --> CANEMU
+  CANCFG --> CAN_TRANSPORT
 
   IO_TRANSPORT --> UDP
   CAN_TRANSPORT --> UDP
@@ -279,12 +281,16 @@ flowchart TB
   SIL_IO --> IO_T
   SIL_IO --> HELPER
   SIL_CAN --> CANEMU
+  SIL_CAN --> CAN_T
   SIL_CAN --> HELPER
-  CANEMU --> CAN_T
   IO_T --> UDP
   CAN_T --> UDP
   HELPER --> UDP
 ```
+
+`sil_vcan_config` drives `can_emulator` and `can_transport_udp` as **peers** —
+neither module calls the other. The emulator therefore performs no I/O, which
+is what keeps it unit-testable without a network.
 
 ### Layering Rules
 
@@ -407,6 +413,20 @@ flowchart LR
 | `can_emulator` | `sil_lib/vcan/can_emulator/` | In-memory virtual CAN bus |
 | `sil_vcan_config` | `sil_lib/vcan/` | CAN BSP: wires CanDriver |
 
+Planned modules, described in the target-architecture sections of the vCAN
+design documents:
+
+| Module | Directory | Purpose | Status |
+|--------|-----------|---------|--------|
+| `can_bus_emulator` | `sil_lib/vcan/can_bus_emulator/` | The medium: inter-node arbitration, ACK, bit timing | Planned |
+| bus connection | `sil_lib/vcan/` | Abstract controller ↔ bus seam, with local and UDP implementations | Planned |
+| vCAN hub | `sil_lib/vcan/` + executable | Hosts `can_bus_emulator`, lets several processes share one bus | Planned |
+
+Under that target, `can_emulator` narrows to modelling a microcontroller's CAN
+**controller** peripheral, and inter-node routing moves to `can_bus_emulator`.
+See `sil_lib/vcan/can_emulator/SDD_sil_can_emulator.md` section 9 and
+`sil_lib/vcan/SDD_sil_vcan.md` section 12.
+
 Detailed design for each subsystem:
 
 | Document | Path |
@@ -503,6 +523,8 @@ Robot Framework scenarios will validate end-to-end behavior:
 | Unit Testing Manual | `test/UM_testing.md` | Current |
 | VT Simulator SDD | — | Planned |
 | ISOBUS Services SDD | — | Planned |
+| CAN Bus Emulator SDD | `sil_lib/vcan/can_bus_emulator/SDD_sil_can_bus_emulator.md` | Planned |
+| vCAN Hub SDD | `sil_lib/vcan/SDD_sil_vcan_hub.md` | Planned |
 | IO CLI | — | Planned |
 | Robot Framework Test Architecture SDD | — | Planned |
 

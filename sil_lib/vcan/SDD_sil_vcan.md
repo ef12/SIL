@@ -7,25 +7,32 @@ that provides realistic CAN bus behavior for simulation. It lets application
 code use the standard `CanDriver` interface without knowing whether it runs
 on real hardware or a simulated environment.
 
-The subsystem has three layers:
+The subsystem is assembled from three collaborating modules:
 
 ```mermaid
-block-beta
-  columns 1
-  block:app["Application Code"]
-    A["CanDriver — send / receive / close"]
-  end
-  space
-  block:emu["CAN Emulator"]
-    B["TX arbitration, RX queuing — CAN HW behavior"]
-  end
-  space
-  block:udp["CAN-over-UDP Transport"]
-    C["Serializes frames, sends/receives via UDP"]
-  end
+graph TD
+    APP["<b>Application code</b><br/>CanDriver — send / receive"]
+    CFG["<b>sil_vcan_config</b><br/>assembly · lifecycle · locking<br/><i>drives both modules below</i>"]
+    EMU["<b>can_emulator</b><br/>arbitration · routing · RX queues<br/><i>in-memory, no I/O</i>"]
+    TRN["<b>can_transport_udp</b><br/>CanFrame ⇄ 13-byte payload"]
+    SOCK["<b>udp_socket</b>"]
 
-  app --> emu --> udp
+    APP -->|"CanDriver* (vtable)"| CFG
+    CFG --> EMU
+    CFG --> TRN
+    TRN --> SOCK
+
+    style APP fill:#369,stroke:#333,color:#fff
+    style CFG fill:#4a9,stroke:#333,color:#fff
+    style EMU fill:#963,stroke:#333,color:#fff
+    style TRN fill:#666,stroke:#333,color:#fff
+    style SOCK fill:#666,stroke:#333,color:#fff
 ```
+
+Note that `can_emulator` and `can_transport_udp` are **peers**, not a pipeline:
+neither calls the other. `sil_vcan_config` owns both and sequences them inside
+its `send` and `receive` callbacks. This is what keeps `can_emulator` free of
+I/O and independently testable.
 
 ## 2. Components
 
@@ -290,6 +297,12 @@ graph LR
 The emulator provides CAN arbitration: if Sensor A and Sensor B both send
 frames, the one with the lower CAN ID is delivered to the application first.
 
+> **Boundary.** This covers multiple *logical* nodes hosted inside a single
+> peer process, which is often all that is needed. It does not allow several
+> independently built **processes** to share one bus — the UDP link has exactly
+> one remote endpoint. See section 12 for the planned hub that removes this
+> restriction.
+
 ### 4.5 Full Topology Example
 
 ```mermaid
@@ -438,3 +451,103 @@ Set-Location test
 ruby -S ceedling test:can_transport_udp
 ruby -S ceedling test:can_emulator
 ```
+
+## 12. Target Architecture — Shared Bus via a Hub
+
+> **Status: planned.** Nothing in this section is implemented yet. Sections
+> 1–11 describe the code as it exists today.
+
+### 12.1 The present limitation
+
+`can_transport_udp_send_frame()` transmits to a **single** configured
+`remote_ip:remote_port`, and each participant binds one local port. The result
+is a point-to-point link — a *cable*, not a *bus*:
+
+```mermaid
+graph LR
+    S["Participant A<br/>bind 9001"]
+    V["Participant B<br/>bind 9000"]
+    P["Participant C"]
+    S <-->|"UDP 9001 ⇄ 9000"| V
+    P -.->|"cannot join:<br/>9000 already bound"| V
+
+    style S fill:#369,stroke:#333,color:#fff
+    style V fill:#963,stroke:#333,color:#fff
+    style P fill:#a44,stroke:#333,color:#fff
+```
+
+Exactly two processes can participate. A third has nowhere to attach, because
+the medium has no concept of more than one peer. Section 4.4 describes running
+several *logical* nodes inside one peer process, which remains valid and is
+often sufficient — but it cannot place independently built executables (an
+implement application, a VT simulator, a test harness) on one shared bus.
+
+### 12.2 Target topology
+
+A hub process owns the medium. Every participant sends to the hub, and the hub
+replicates each frame to all *other* participants — physically a star,
+logically a bus. This is the same pattern used by SocketCAN's `vcan` and by
+commercial virtual bus tooling.
+
+```mermaid
+graph TD
+    HUB["<b>vCAN hub</b><br/>owns can_bus_emulator<br/>endpoint map (ip, port) ↔ node"]
+    A["Implement application"]
+    B["VT simulator"]
+    C["Test harness"]
+    D["further nodes…"]
+
+    A <--> HUB
+    B <--> HUB
+    C <--> HUB
+    D <--> HUB
+
+    style HUB fill:#4a9,stroke:#333,color:#fff
+    style A fill:#369,stroke:#333,color:#fff
+    style B fill:#963,stroke:#333,color:#fff
+    style C fill:#369,stroke:#333,color:#fff
+    style D fill:#666,stroke:#333,color:#fff
+```
+
+Centralising the medium is deliberate: arbitration, frame timing and bandwidth
+are properties **of the bus**. Distributing them across peers would require
+every node to agree on ordering, and fidelity would degrade. One owner keeps
+them correct and in one place.
+
+### 12.3 Relationship to the controller / bus split
+
+This topology is the natural consequence of the module separation described in
+`can_emulator/SDD_sil_can_emulator.md` section 9:
+
+| Element | Owner | Instances |
+|---------|-------|-----------|
+| `can_emulator` (controller) | each participant process | one per node |
+| bus connection (transceiver) | each participant process | one per node |
+| `can_bus_emulator` (medium) | the hub process | one per bus |
+
+`sil_vcan_config` keeps its present role — assembling a stack and returning a
+`CanDriver*` — but assembles *controller + bus connection* rather than
+*emulator + transport*. Application code and the `CanDriver` interface are
+unaffected.
+
+### 12.4 Compatibility
+
+The hub should bind the port that participants already transmit to, and reply
+to each participant's observed source address. A participant whose remote port
+already points at the hub then joins **without recompilation**; only components
+that currently *bind* the hub's port need their configuration made adjustable.
+
+Retaining the existing point-to-point mode is recommended during migration, so
+current two-process setups keep working while the hub is introduced.
+
+### 12.5 Risk — transport protocol timing
+
+Section 3.7 documents that exactly one datagram is pulled per
+`can_driver_receive()` call, because ISOBUS TP/ETP flow control depends on
+every CTS/DPO being processed promptly. A hub inserts an additional network
+hop, and any bus-cycle batching adds further delay.
+
+Mitigation: make the bus cycle length configurable and **default it to zero**
+(arbitrate only what is genuinely pending), enabling batching only for
+deliberate loaded-bus tests. A transport-protocol regression test against a
+real VT must be part of the acceptance criteria for the hub.
