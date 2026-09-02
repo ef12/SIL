@@ -329,8 +329,8 @@ def load_library(path: str | os.PathLike | None = None):
     library.wcan_shm_bus_stats.argtypes = [c_void_p, POINTER(_CStats)]
     library.wcan_shm_node_count.restype = c_int
     library.wcan_shm_node_count.argtypes = [c_void_p, POINTER(c_uint32)]
-    library.wcan_shm_frame_bits.restype = c_uint32
-    library.wcan_shm_frame_bits.argtypes = [POINTER(_CFrame), c_int]
+    library.wcan_frame_bits.restype = c_uint32
+    library.wcan_frame_bits.argtypes = [POINTER(_CFrame), c_int]
     library.wcan_shm_abi_version.restype = c_uint32
     library.wcan_shm_abi_version.argtypes = []
     library.wcan_shm_segment_size.restype = c_uint32
@@ -457,7 +457,7 @@ class Bus:
         """Returns the airtime of a frame in bits, including interframe space."""
         native = _CFrame(can_id=frame.id, dlc=len(frame.data), flags=frame.flags)
         ctypes.memmove(native.data, frame.data, len(frame.data))
-        return self._library.wcan_shm_frame_bits(
+        return self._library.wcan_frame_bits(
             ctypes.byref(native), 1 if worst_case else 0
         )
 

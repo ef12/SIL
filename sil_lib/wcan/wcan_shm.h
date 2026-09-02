@@ -11,7 +11,7 @@
 
 #include <stdint.h>
 
-#include "wcan.h"
+#include "wcan_types.h"
 #include "wcan_export.h"
 
 /* Receive frames this socket transmitted. Off by default, unlike the pipe
@@ -72,13 +72,6 @@ WCAN_API int WCAN_CALL wcan_shm_recv_timeout(wcan_shm_socket_t *socket,
                                              uint32_t timeout_ms);
 WCAN_API int WCAN_CALL wcan_shm_cancel(wcan_shm_socket_t *socket);
 WCAN_API int WCAN_CALL wcan_shm_close(wcan_shm_socket_t *socket);
-
-/*
- * Total bit count of one frame on the wire, including the interframe space.
- * Exposed so the airtime model can be unit tested against known values.
- */
-WCAN_API uint32_t WCAN_CALL wcan_shm_frame_bits(const wcan_frame_t *frame,
-                                                int worst_case);
 
 WCAN_API int WCAN_CALL wcan_shm_bus_stats(wcan_shm_socket_t *socket,
                                           wcan_shm_bus_stats_t *stats);

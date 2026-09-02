@@ -6,7 +6,7 @@
  * and so a consumer can validate a frame before it opens a bus.
  */
 
-#include "wcan.h"
+#include "wcan_validate.h"
 
 #include <string.h>
 

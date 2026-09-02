@@ -15,7 +15,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "wcan.h"
+#include "wcan_types.h"
 
 #define WCAN_SHM_MAGIC 0x4d485357u /* 'WSHM' */
 #define WCAN_SHM_VERSION 2u

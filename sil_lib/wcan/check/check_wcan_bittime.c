@@ -80,8 +80,8 @@ static int test_airtime(void)
     /* Extended, 8 data bytes: 64 + 8N = 128 bits before stuffing, a stuffed
        region of 118 bits allowing 29 stuff bits, plus 3 bits of interframe
        space. */
-    worst = wcan_shm_frame_bits(&extended8, 1);
-    exact = wcan_shm_frame_bits(&extended8, 0);
+    worst = wcan_frame_bits(&extended8, 1);
+    exact = wcan_frame_bits(&extended8, 0);
     CHECK(worst == 160u);
     CHECK(exact >= 131u);
     CHECK(exact <= worst);
@@ -91,8 +91,8 @@ static int test_airtime(void)
            (double)worst * 1e6 / ISOBUS_BITRATE);
 
     /* Standard, no data: 44 bits before stuffing, region of 34. */
-    worst = wcan_shm_frame_bits(&standard0, 1);
-    exact = wcan_shm_frame_bits(&standard0, 0);
+    worst = wcan_frame_bits(&standard0, 1);
+    exact = wcan_frame_bits(&standard0, 0);
     CHECK(worst == 55u);
     CHECK(exact >= 47u);
     CHECK(exact <= worst);
@@ -104,7 +104,7 @@ static int test_airtime(void)
     /* Identifier 0 with no data drives 19 dominant bits before the CRC, which
        forces a stuff bit after every fifth: at least three of them. */
     make_frame(&zeros, 0x000u, 0, 0);
-    exact = wcan_shm_frame_bits(&zeros, 0);
+    exact = wcan_frame_bits(&zeros, 0);
     CHECK(exact >= 47u + 3u);
     printf("  all-dominant id  : exact %3u bits, %u stuff bits inserted\n",
            exact, exact - 47u);
@@ -256,7 +256,7 @@ static int measure_pacing(const char *bus, uint32_t flags, const char *label,
     consumer.ready = CreateEventW(NULL, TRUE, FALSE, NULL);
 
     make_frame(&frame, 0x18ff50e5u, 8, 1);
-    bits = wcan_shm_frame_bits(&frame, 0);
+    bits = wcan_frame_bits(&frame, 0);
     theoretical = (double)frames * (double)bits / (double)ISOBUS_BITRATE;
 
     thread = CreateThread(NULL, 0, consumer_thread, &consumer, 0, NULL);
@@ -368,7 +368,7 @@ static int measure_rate(uint32_t bitrate)
     consumer.ready = CreateEventW(NULL, TRUE, FALSE, NULL);
 
     make_frame(&frame, 0x18ff50e5u, 8, 1);
-    bits = wcan_shm_frame_bits(&frame, 0);
+    bits = wcan_frame_bits(&frame, 0);
     theoretical = (double)frames * (double)bits / (double)bitrate;
 
     thread = CreateThread(NULL, 0, consumer_thread, &consumer, 0, NULL);

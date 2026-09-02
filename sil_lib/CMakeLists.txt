@@ -27,9 +27,30 @@ add_library(sil_lib
 if(WIN32)
     target_sources(sil_lib PRIVATE
         wcan/wcan_validate.c
+        wcan/wcan_airtime.c
         wcan/wcan_shm.c
     )
     target_link_libraries(sil_lib PUBLIC advapi32 winmm)
+
+    # Integration and diagnostic programs. These drive real shared memory,
+    # real processes and real time, so they are deliberately not Ceedling unit
+    # tests; they live in wcan/check and are built on request.
+    option(WCAN_BUILD_CHECKS "Build the WCAN integration and diagnostic programs" OFF)
+    if(WCAN_BUILD_CHECKS)
+        foreach(wcan_program
+                check/check_wcan_transport
+                check/check_wcan_bittime
+                check/check_wcan_layout
+                tools/wcan_peer
+                tools/wcan_resources)
+            get_filename_component(wcan_target ${wcan_program} NAME)
+            add_executable(${wcan_target} wcan/${wcan_program}.c)
+            target_link_libraries(${wcan_target} PRIVATE sil_lib)
+            target_include_directories(${wcan_target} PRIVATE ${SIL_WCAN_ROOT})
+            set_module_output_layout(${wcan_target} "sil_lib/wcan")
+        endforeach()
+        target_link_libraries(wcan_resources PRIVATE psapi)
+    endif()
 endif()
 
 target_include_directories(sil_lib
@@ -75,6 +96,7 @@ if(WIN32)
     # every node maps, including consumers built by another toolchain.
     install(FILES
         wcan/wcan.h
+        wcan/wcan_types.h
         wcan/wcan_shm.h
         wcan/wcan_export.h
         wcan/wcan_layout.h

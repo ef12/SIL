@@ -9,12 +9,13 @@
 #include <string.h>
 
 #include "wcan_shm.h"
+#include "wcan_airtime.h"
+#include "wcan_validate.h"
 #include "wcan_layout.h"
 
 #define WCAN_SHM_DEFAULT_BITRATE 250000u
 #define WCAN_SHM_DEFAULT_LEAD_US 2000u
 #define WCAN_SHM_LOCK_TIMEOUT_MS 5000u
-
 typedef struct {
     HANDLE section;
     HANDLE bus_mutex;
@@ -208,11 +209,8 @@ static int ring_pop(wcan_shm_node_t *node, wcan_shm_slot_t *out_slot)
 }
 
 /* ================================================================
- *  Bit-time model
+ *  Performance counter helpers
  * ================================================================ */
-
-#define WCAN_SHM_UNSTUFFED_TAIL_BITS 13u
-#define WCAN_SHM_CRC15_POLYNOMIAL 0x4599u
 
 static long long qpc_now(void)
 {
@@ -228,124 +226,6 @@ static long long qpc_frequency(void)
 
     QueryPerformanceFrequency(&frequency);
     return frequency.QuadPart;
-}
-
-static uint32_t append_bit(uint8_t *bits, uint32_t count, int value)
-{
-    bits[count] = (uint8_t)(value != 0);
-    return count + 1u;
-}
-
-static uint32_t append_field(uint8_t *bits, uint32_t count, uint32_t value,
-                             uint32_t width)
-{
-    uint32_t index;
-
-    for (index = width; index > 0u; --index) {
-        count = append_bit(bits, count, (int)((value >> (index - 1u)) & 1u));
-    }
-    return count;
-}
-
-/*
- * Serializes a classical CAN frame exactly as a controller drives it, so the
- * stuff bits can be counted rather than estimated. Field order per
- * ISO 11898-1:
- *
- *   standard: SOF ID(11) RTR IDE r0 DLC(4) data CRC(15)
- *   extended: SOF ID(11) SRR IDE ID(18) RTR r1 r0 DLC(4) data CRC(15)
- *
- * Stuffing covers SOF through CRC. The CRC delimiter, ACK slot, ACK delimiter,
- * end of frame and interframe space are never stuffed and contribute a fixed
- * 13 bits.
- */
-static uint32_t build_frame_bits(const wcan_frame_t *frame, uint8_t *bits)
-{
-    const int extended = (frame->flags & WCAN_FLAG_EXTENDED) != 0;
-    const int remote = (frame->flags & WCAN_FLAG_RTR) != 0;
-    const uint32_t payload = remote ? 0u : frame->dlc;
-    uint32_t count = 0;
-    uint32_t crc = 0;
-    uint32_t index;
-
-    count = append_bit(bits, count, 0); /* SOF is dominant */
-    if (extended) {
-        count = append_field(bits, count, (frame->can_id >> 18) & 0x7ffu, 11u);
-        count = append_bit(bits, count, 1); /* SRR */
-        count = append_bit(bits, count, 1); /* IDE recessive */
-        count = append_field(bits, count, frame->can_id & 0x3ffffu, 18u);
-        count = append_bit(bits, count, remote);
-        count = append_bit(bits, count, 0); /* r1 */
-        count = append_bit(bits, count, 0); /* r0 */
-    } else {
-        count = append_field(bits, count, frame->can_id & 0x7ffu, 11u);
-        count = append_bit(bits, count, remote);
-        count = append_bit(bits, count, 0); /* IDE dominant */
-        count = append_bit(bits, count, 0); /* r0 */
-    }
-    count = append_field(bits, count, frame->dlc & 0x0fu, 4u);
-    for (index = 0; index < payload; ++index) {
-        count = append_field(bits, count, frame->data[index], 8u);
-    }
-
-    for (index = 0; index < count; ++index) {
-        const uint32_t feedback = ((crc >> 14) & 1u) ^ (uint32_t)bits[index];
-
-        crc = (crc << 1) & 0x7fffu;
-        if (feedback != 0u) {
-            crc ^= WCAN_SHM_CRC15_POLYNOMIAL;
-        }
-    }
-    return append_field(bits, count, crc, 15u);
-}
-
-static uint32_t count_stuff_bits(const uint8_t *bits, uint32_t count)
-{
-    uint32_t stuffed = 0;
-    uint32_t run = 0;
-    int last = -1;
-    uint32_t index;
-
-    for (index = 0; index < count; ++index) {
-        const int value = (int)bits[index];
-
-        if (value == last) {
-            run++;
-        } else {
-            last = value;
-            run = 1u;
-        }
-        if (run == 5u) {
-            /* The transmitter inserts a complementary bit, which then starts
-               a new run of its own. */
-            stuffed++;
-            last = (value == 0) ? 1 : 0;
-            run = 1u;
-        }
-    }
-    return stuffed;
-}
-
-uint32_t wcan_shm_frame_bits(const wcan_frame_t *frame, int worst_case)
-{
-    uint8_t bits[192];
-    uint32_t region;
-
-    if (frame == NULL) {
-        return 0;
-    }
-    if ((frame->flags & WCAN_FLAG_FD) != 0u) {
-        /* Approximation. CAN FD uses different stuff rules and a wider CRC,
-           and is out of scope for a 250 kbit/s ISOBUS. */
-        return 32u + (8u * (uint32_t)frame->dlc) + WCAN_SHM_UNSTUFFED_TAIL_BITS;
-    }
-
-    region = build_frame_bits(frame, bits);
-    if (worst_case) {
-        return region + ((region - 1u) / 4u) + WCAN_SHM_UNSTUFFED_TAIL_BITS;
-    }
-    return region + count_stuff_bits(bits, region) +
-           WCAN_SHM_UNSTUFFED_TAIL_BITS;
 }
 
 /* ================================================================
@@ -886,7 +766,7 @@ int wcan_shm_send(wcan_shm_socket_t *socket, const wcan_frame_t *frame)
 
         entry.slot.sequence = impl->bus->sequence++;
         entry.arrival = now;
-        entry.bits = wcan_shm_frame_bits(
+        entry.bits = wcan_frame_bits(
             frame, (impl->bus->flags & WCAN_SHM_BUS_WORST_CASE_STUFFING) != 0u);
         impl->bus->pending[impl->bus->pending_count] = entry;
         impl->bus->pending_count++;
