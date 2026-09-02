@@ -14,3 +14,7 @@ Makefile
 *.out
 *.pdb
 *.ilk
+# Python bytecode
+__pycache__/
+*.py[cod]
+
