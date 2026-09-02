@@ -18,7 +18,8 @@
         }                                                                      \
     } while (0)
 
-#define ISOBUS_BITRATE 250000u
+/* A common CAN bitrate, used as the reference for these measurements. */
+#define REFERENCE_BITRATE 250000u
 
 static double now_seconds(void)
 {
@@ -87,8 +88,8 @@ static int test_airtime(void)
     CHECK(exact <= worst);
     printf("  extended/8 bytes : exact %3u bits (%6.1f us)   worst %3u bits "
            "(%6.1f us)\n",
-           exact, (double)exact * 1e6 / ISOBUS_BITRATE, worst,
-           (double)worst * 1e6 / ISOBUS_BITRATE);
+           exact, (double)exact * 1e6 / REFERENCE_BITRATE, worst,
+           (double)worst * 1e6 / REFERENCE_BITRATE);
 
     /* Standard, no data: 44 bits before stuffing, region of 34. */
     worst = wcan_frame_bits(&standard0, 1);
@@ -98,8 +99,8 @@ static int test_airtime(void)
     CHECK(exact <= worst);
     printf("  standard/0 bytes : exact %3u bits (%6.1f us)   worst %3u bits "
            "(%6.1f us)\n",
-           exact, (double)exact * 1e6 / ISOBUS_BITRATE, worst,
-           (double)worst * 1e6 / ISOBUS_BITRATE);
+           exact, (double)exact * 1e6 / REFERENCE_BITRATE, worst,
+           (double)worst * 1e6 / REFERENCE_BITRATE);
 
     /* Identifier 0 with no data drives 19 dominant bits before the CRC, which
        forces a stuff bit after every fifth: at least three of them. */
@@ -142,7 +143,7 @@ static int test_arbitration(void)
     wcan_frame_t frame;
 
     memset(&params, 0, sizeof(params));
-    params.bitrate = ISOBUS_BITRATE;
+    params.bitrate = REFERENCE_BITRATE;
     params.flags = WCAN_BUS_PACE_ADMISSION;
 
     CHECK(wcan_open_ex(&observer, "bt.arb", &params) == WCAN_OK);
@@ -244,7 +245,7 @@ static int measure_pacing(const char *bus, uint32_t flags, const char *label,
     unsigned int index;
 
     memset(&params, 0, sizeof(params));
-    params.bitrate = ISOBUS_BITRATE;
+    params.bitrate = REFERENCE_BITRATE;
     params.flags = flags;
 
     CHECK(wcan_open_ex(&producer, bus, &params) == WCAN_OK);
@@ -257,7 +258,7 @@ static int measure_pacing(const char *bus, uint32_t flags, const char *label,
 
     make_frame(&frame, 0x18ff50e5u, 8, 1);
     bits = wcan_frame_bits(&frame, 0);
-    theoretical = (double)frames * (double)bits / (double)ISOBUS_BITRATE;
+    theoretical = (double)frames * (double)bits / (double)REFERENCE_BITRATE;
 
     thread = CreateThread(NULL, 0, consumer_thread, &consumer, 0, NULL);
     WaitForSingleObject(consumer.ready, 2000);

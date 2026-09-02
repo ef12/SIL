@@ -24,8 +24,16 @@ and could therefore only ever connect two peers.
 | `test/` | Ceedling unit tests for the portable logic |
 | `check/` | Integration and diagnostic programs, built with `WCAN_BUILD_CHECKS` |
 | `tools/` | `wcan_peer` reference node, `wcan_resources` footprint report |
-| `python/` | `ctypes` binding and an ISOBUS injection example |
-| `agisostack/` | `CANHardwarePlugin` implementation for AgIsoStack |
+| `python/` | `ctypes` binding to the same API |
+
+## Scope
+
+WCAN carries CAN frames and nothing more. It has no knowledge of J1939, ISOBUS,
+or of any particular consumer, and nothing here depends on a protocol stack.
+Adapters belong with the consumer that needs them: the AgIsoStack
+`CANHardwarePlugin` for WCAN lives in that project's `hardware_integration`,
+next to the other driver plugins, and depends on this library rather than the
+other way round.
 
 ## The segment is the ABI
 

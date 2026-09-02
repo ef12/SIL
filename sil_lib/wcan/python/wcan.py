@@ -2,8 +2,11 @@
 Python binding for the WCAN virtual CAN bus.
 
 Pure ``ctypes`` against ``wcan.dll`` — no build step and no compiled extension,
-so it works with any CPython on Windows. Intended for injecting and observing
-ISOBUS traffic alongside a running simulation.
+so it works with any CPython on Windows.
+
+This binding is deliberately protocol agnostic: it moves CAN frames and knows
+nothing about what rides on top of them. Higher layers such as J1939 or ISOBUS
+belong in the application that speaks them.
 
 The DLL must match the interpreter's bitness. A 64-bit Python needs a 64-bit
 ``wcan.dll``; the C peers on the bus may be 32-bit, because processes
@@ -22,7 +25,6 @@ from __future__ import annotations
 
 import ctypes
 import os
-import struct
 import sys
 from ctypes import (
     POINTER,
@@ -90,10 +92,6 @@ _ERROR_CLOSED = -7
 # 29-bit identifiers do not fit the 11-bit standard field.
 _MAX_STANDARD_ID = 0x7FF
 _MAX_EXTENDED_ID = 0x1FFFFFFF
-
-# PDU format values below this threshold are PDU1 (destination specific).
-_PDU1_FORMAT_LIMIT = 240
-_GLOBAL_ADDRESS = 255
 
 
 class WcanError(RuntimeError):
@@ -178,7 +176,7 @@ class Frame:
     """One CAN frame.
 
     ``flags`` defaults to marking the frame extended whenever the identifier
-    cannot fit in 11 bits, which is what ISOBUS always needs.
+    cannot fit in 11 bits.
     """
 
     id: int
@@ -203,73 +201,16 @@ class Frame:
     def is_extended(self) -> bool:
         return bool(self.flags & FLAG_EXTENDED)
 
-    @property
-    def priority(self) -> int:
-        """J1939 priority field (bits 26-28)."""
-        return (self.id >> 26) & 0x07
-
-    @property
-    def pdu_format(self) -> int:
-        return (self.id >> 16) & 0xFF
-
-    @property
-    def pdu_specific(self) -> int:
-        return (self.id >> 8) & 0xFF
-
-    @property
-    def source_address(self) -> int:
-        return self.id & 0xFF
-
-    @property
-    def pgn(self) -> int:
-        """Parameter Group Number decoded from the arbitration ID."""
-        base = (((self.id >> 24) & 0x03) << 16) | (self.pdu_format << 8)
-        if self.pdu_format < _PDU1_FORMAT_LIMIT:
-            return base
-        return base | self.pdu_specific
-
-    @property
-    def destination_address(self) -> int:
-        if self.pdu_format < _PDU1_FORMAT_LIMIT:
-            return self.pdu_specific
-        return _GLOBAL_ADDRESS
-
     def __str__(self) -> str:
+        width = 8 if self.is_extended else 3
         return (
-            f"{self.id:08X}  {self.pgn:05X}  {self.source_address:3d}  "
-            f"{self.destination_address:3d}  {self.priority:3d}  "
+            f"{self.id:0{width}X}  {self.flags:02X}  "
             f"{len(self.data):3d}  {self.data.hex(' ').upper()}"
         )
 
     @staticmethod
     def header() -> str:
-        return (
-            f"{'ID':>8}  {'PGN':>5}  {'SA':>3}  {'DA':>3}  "
-            f"{'PRI':>3}  {'LEN':>3}  DATA"
-        )
-
-
-def build_id(
-    priority: int, pgn: int, source_address: int, destination: int = _GLOBAL_ADDRESS
-) -> int:
-    """Composes a 29-bit ISOBUS/J1939 arbitration ID from its fields."""
-    if not 0 <= priority <= 0x07:
-        raise ValueError(f"priority must be 0..7, got {priority}")
-    if not 0 <= source_address <= 0xFF:
-        raise ValueError(f"source_address must be 0..255, got {source_address}")
-
-    data_page = (pgn >> 16) & 0x03
-    pdu_format = (pgn >> 8) & 0xFF
-    pdu_specific = (
-        destination & 0xFF if pdu_format < _PDU1_FORMAT_LIMIT else pgn & 0xFF
-    )
-    return (
-        (priority << 26)
-        | (data_page << 24)
-        | (pdu_format << 16)
-        | (pdu_specific << 8)
-        | source_address
-    )
+        return f"{'ID':>8}  {'FLG':>3}  {'LEN':>3}  DATA"
 
 
 _library = None
