@@ -8,22 +8,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "wcan_shm.h"
+#include "wcan.h"
 #include "wcan_airtime.h"
 #include "wcan_validate.h"
 #include "wcan_layout.h"
 
-#define WCAN_SHM_DEFAULT_BITRATE 250000u
-#define WCAN_SHM_DEFAULT_LEAD_US 2000u
-#define WCAN_SHM_LOCK_TIMEOUT_MS 5000u
+#define WCAN_DEFAULT_BITRATE 250000u
+#define WCAN_DEFAULT_LEAD_US 2000u
+#define WCAN_LOCK_TIMEOUT_MS 5000u
 typedef struct {
     HANDLE section;
     HANDLE bus_mutex;
     HANDLE alive_mutex;
     HANDLE own_event;
     HANDLE cancel_event;
-    HANDLE peer_events[WCAN_SHM_MAX_NODES];
-    wcan_shm_bus_t *bus;
+    HANDLE peer_events[WCAN_MAX_NODES];
+    wcan_bus_t *bus;
     uint32_t node_index;
     int claimed;
     int timer_raised;
@@ -31,7 +31,7 @@ typedef struct {
     volatile LONG closing;
     HANDLE no_operations;
     char bus_name[WCAN_MAX_BUS_NAME + 1u];
-} wcan_shm_impl_t;
+} wcan_impl_t;
 
 /*
  * Send and receive may run on different threads from close. These two guards
@@ -39,7 +39,7 @@ typedef struct {
  * underneath them, which is exactly what a CANHardwarePlugin does when its
  * owner shuts down while a receive thread is blocked.
  */
-static int operation_begin(wcan_shm_impl_t *impl)
+static int operation_begin(wcan_impl_t *impl)
 {
     if (InterlockedCompareExchange(&impl->closing, 0, 0) != 0) {
         return 0;
@@ -56,7 +56,7 @@ static int operation_begin(wcan_shm_impl_t *impl)
     return 1;
 }
 
-static void operation_end(wcan_shm_impl_t *impl)
+static void operation_end(wcan_impl_t *impl)
 {
     if (InterlockedDecrement(&impl->active_operations) == 0) {
         SetEvent(impl->no_operations);
@@ -70,15 +70,15 @@ static void operation_end(wcan_shm_impl_t *impl)
  * same node. The mutex is still what detects a crashed owner across
  * processes, so keep it and additionally track claims within this process.
  */
-#define WCAN_SHM_MAX_CLAIMS (WCAN_SHM_MAX_NODES * 4u)
+#define WCAN_MAX_CLAIMS (WCAN_MAX_NODES * 4u)
 
 typedef struct {
     int used;
     uint32_t index;
     char bus_name[WCAN_MAX_BUS_NAME + 1u];
-} wcan_shm_claim_t;
+} wcan_claim_t;
 
-static wcan_shm_claim_t g_claims[WCAN_SHM_MAX_CLAIMS];
+static wcan_claim_t g_claims[WCAN_MAX_CLAIMS];
 static CRITICAL_SECTION g_claims_lock;
 static volatile LONG g_claims_state; /* 0 unset, 1 initializing, 2 ready */
 
@@ -101,7 +101,7 @@ static int claims_reserve(const char *bus_name, uint32_t index)
 
     claims_init();
     EnterCriticalSection(&g_claims_lock);
-    for (slot = 0; slot < WCAN_SHM_MAX_CLAIMS; ++slot) {
+    for (slot = 0; slot < WCAN_MAX_CLAIMS; ++slot) {
         if (g_claims[slot].used == 0) {
             if (free_slot < 0) {
                 free_slot = (int)slot;
@@ -132,7 +132,7 @@ static void claims_release(const char *bus_name, uint32_t index)
 
     claims_init();
     EnterCriticalSection(&g_claims_lock);
-    for (slot = 0; slot < WCAN_SHM_MAX_CLAIMS; ++slot) {
+    for (slot = 0; slot < WCAN_MAX_CLAIMS; ++slot) {
         if (g_claims[slot].used != 0 && g_claims[slot].index == index &&
             strcmp(g_claims[slot].bus_name, bus_name) == 0) {
             g_claims[slot].used = 0;
@@ -167,10 +167,10 @@ static void build_object_name(wchar_t *destination, size_t destination_length,
  * the index last, so an interrupted writer leaves the ring consistent and
  * ownership can simply be taken over.
  */
-static int bus_lock(wcan_shm_impl_t *impl)
+static int bus_lock(wcan_impl_t *impl)
 {
     DWORD result = WaitForSingleObject(impl->bus_mutex,
-                                       WCAN_SHM_LOCK_TIMEOUT_MS);
+                                       WCAN_LOCK_TIMEOUT_MS);
 
     if (result == WAIT_OBJECT_0 || result == WAIT_ABANDONED) {
         return WCAN_OK;
@@ -178,32 +178,32 @@ static int bus_lock(wcan_shm_impl_t *impl)
     return result == WAIT_TIMEOUT ? WCAN_ERROR_TIMEOUT : WCAN_ERROR_IO;
 }
 
-static void bus_unlock(wcan_shm_impl_t *impl)
+static void bus_unlock(wcan_impl_t *impl)
 {
     (void)ReleaseMutex(impl->bus_mutex);
 }
 
-static void ring_push(wcan_shm_node_t *node, const wcan_shm_slot_t *slot)
+static void ring_push(wcan_node_t *node, const wcan_slot_t *slot)
 {
     uint32_t write_index;
 
-    if (node->count >= WCAN_SHM_RING_CAPACITY) {
+    if (node->count >= WCAN_RING_CAPACITY) {
         /* Receive overrun, exactly as a real controller reports it. */
         node->overrun++;
         return;
     }
-    write_index = (node->head + node->count) % WCAN_SHM_RING_CAPACITY;
+    write_index = (node->head + node->count) % WCAN_RING_CAPACITY;
     node->ring[write_index] = *slot;
     node->count++;
 }
 
-static int ring_pop(wcan_shm_node_t *node, wcan_shm_slot_t *out_slot)
+static int ring_pop(wcan_node_t *node, wcan_slot_t *out_slot)
 {
     if (node->count == 0u) {
         return 0;
     }
     *out_slot = node->ring[node->head];
-    node->head = (node->head + 1u) % WCAN_SHM_RING_CAPACITY;
+    node->head = (node->head + 1u) % WCAN_RING_CAPACITY;
     node->count--;
     return 1;
 }
@@ -238,8 +238,8 @@ static long long qpc_frequency(void)
  * same base identifier because IDE is dominant, and a data frame beats a
  * remote frame.
  */
-static int arbitration_wins(const wcan_shm_pending_t *candidate,
-                            const wcan_shm_pending_t *incumbent)
+static int arbitration_wins(const wcan_pending_t *candidate,
+                            const wcan_pending_t *incumbent)
 {
     const int candidate_extended =
         (candidate->slot.flags & WCAN_FLAG_EXTENDED) != 0;
@@ -280,7 +280,7 @@ static int arbitration_wins(const wcan_shm_pending_t *candidate,
  * Only a sender's oldest queued frame may contend. Reordering within one
  * sender would corrupt ISOBUS transport protocol sequences.
  */
-static int is_sender_head(const wcan_shm_bus_t *bus, uint32_t index)
+static int is_sender_head(const wcan_bus_t *bus, uint32_t index)
 {
     uint32_t other;
 
@@ -297,13 +297,13 @@ static int is_sender_head(const wcan_shm_bus_t *bus, uint32_t index)
     return 1;
 }
 
-static void publish_frame(wcan_shm_bus_t *bus, uint32_t sender,
-                          const wcan_shm_slot_t *slot)
+static void publish_frame(wcan_bus_t *bus, uint32_t sender,
+                          const wcan_slot_t *slot)
 {
     uint32_t index;
 
-    for (index = 0; index < WCAN_SHM_MAX_NODES; ++index) {
-        wcan_shm_node_t *node = &bus->nodes[index];
+    for (index = 0; index < WCAN_MAX_NODES; ++index) {
+        wcan_node_t *node = &bus->nodes[index];
 
         if (node->active != 1u) {
             continue;
@@ -321,15 +321,15 @@ static void publish_frame(wcan_shm_bus_t *bus, uint32_t sender,
  * frame arriving meanwhile can still win that slot, which is what makes the
  * ordering match a real bus rather than arrival order.
  */
-static int schedule_pending(wcan_shm_bus_t *bus, uint64_t now)
+static int schedule_pending(wcan_bus_t *bus, uint64_t now)
 {
-    const int paced = (bus->flags & (WCAN_SHM_BUS_PACE_ADMISSION |
-                                     WCAN_SHM_BUS_PACE_DELIVERY)) != 0u;
+    const int paced = (bus->flags & (WCAN_BUS_PACE_ADMISSION |
+                                     WCAN_BUS_PACE_DELIVERY)) != 0u;
     int committed = 0;
 
     while (bus->pending_count > 0u) {
         uint32_t index;
-        uint32_t best = WCAN_SHM_MAX_PENDING;
+        uint32_t best = WCAN_MAX_PENDING;
         uint64_t earliest = 0;
         uint64_t start;
         uint64_t airtime;
@@ -356,12 +356,12 @@ static int schedule_pending(wcan_shm_bus_t *bus, uint64_t now)
             if (!is_sender_head(bus, index)) {
                 continue;
             }
-            if (best == WCAN_SHM_MAX_PENDING ||
+            if (best == WCAN_MAX_PENDING ||
                 arbitration_wins(&bus->pending[index], &bus->pending[best])) {
                 best = index;
             }
         }
-        if (best == WCAN_SHM_MAX_PENDING) {
+        if (best == WCAN_MAX_PENDING) {
             break;
         }
 
@@ -423,7 +423,7 @@ static void wait_until_tick(long long target, long long frequency, int precise)
     }
 }
 
-static HANDLE peer_event(wcan_shm_impl_t *impl, uint32_t index)
+static HANDLE peer_event(wcan_impl_t *impl, uint32_t index)
 {
     wchar_t name[256];
 
@@ -437,14 +437,14 @@ static HANDLE peer_event(wcan_shm_impl_t *impl, uint32_t index)
     return impl->peer_events[index];
 }
 
-static void impl_destroy(wcan_shm_impl_t *impl)
+static void impl_destroy(wcan_impl_t *impl)
 {
     uint32_t index;
 
     if (impl == NULL) {
         return;
     }
-    for (index = 0; index < WCAN_SHM_MAX_NODES; ++index) {
+    for (index = 0; index < WCAN_MAX_NODES; ++index) {
         if (impl->peer_events[index] != NULL) {
             CloseHandle(impl->peer_events[index]);
         }
@@ -486,12 +486,12 @@ static void impl_destroy(wcan_shm_impl_t *impl)
  * kernel reports abandonment. This avoids heartbeat timeouts, which would
  * evict a simulation parked on a breakpoint.
  */
-static int claim_node_slot(wcan_shm_impl_t *impl)
+static int claim_node_slot(wcan_impl_t *impl)
 {
     wchar_t name[256];
     uint32_t index;
 
-    for (index = 0; index < WCAN_SHM_MAX_NODES; ++index) {
+    for (index = 0; index < WCAN_MAX_NODES; ++index) {
         HANDLE candidate;
         DWORD wait_result;
 
@@ -521,23 +521,23 @@ static int claim_node_slot(wcan_shm_impl_t *impl)
     return WCAN_ERROR_TOO_MANY_CLIENTS;
 }
 
-int wcan_shm_open(wcan_shm_socket_t *socket, const char *bus_name,
+int wcan_open(wcan_socket_t *socket, const char *bus_name,
                   uint32_t flags)
 {
-    wcan_shm_params_t params;
+    wcan_params_t params;
 
     memset(&params, 0, sizeof(params));
     params.flags = flags;
-    return wcan_shm_open_ex(socket, bus_name, &params);
+    return wcan_open_ex(socket, bus_name, &params);
 }
 
-int wcan_shm_open_ex(wcan_shm_socket_t *socket, const char *bus_name,
-                     const wcan_shm_params_t *params)
+int wcan_open_ex(wcan_socket_t *socket, const char *bus_name,
+                     const wcan_params_t *params)
 {
     wchar_t name[256];
-    wcan_shm_impl_t *impl;
-    wcan_shm_node_t *node;
-    wcan_shm_params_t effective;
+    wcan_impl_t *impl;
+    wcan_node_t *node;
+    wcan_params_t effective;
     int status;
 
     if (socket == NULL || bus_name == NULL) {
@@ -562,10 +562,10 @@ int wcan_shm_open_ex(wcan_shm_socket_t *socket, const char *bus_name,
         return WCAN_ERROR_INVALID_ARGUMENT;
     }
     if (effective.max_lead_us == 0u) {
-        effective.max_lead_us = WCAN_SHM_DEFAULT_LEAD_US;
+        effective.max_lead_us = WCAN_DEFAULT_LEAD_US;
     }
 
-    impl = (wcan_shm_impl_t *)calloc(1, sizeof(*impl));
+    impl = (wcan_impl_t *)calloc(1, sizeof(*impl));
     if (impl == NULL) {
         return WCAN_ERROR_NO_MEMORY;
     }
@@ -582,14 +582,14 @@ int wcan_shm_open_ex(wcan_shm_socket_t *socket, const char *bus_name,
     build_object_name(name, sizeof(name) / sizeof(name[0]), bus_name, NULL, -1);
     impl->section = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL,
                                        PAGE_READWRITE, 0,
-                                       (DWORD)sizeof(wcan_shm_bus_t), name);
+                                       (DWORD)sizeof(wcan_bus_t), name);
     if (impl->section == NULL) {
         impl_destroy(impl);
         return WCAN_ERROR_IO;
     }
-    impl->bus = (wcan_shm_bus_t *)MapViewOfFile(impl->section,
+    impl->bus = (wcan_bus_t *)MapViewOfFile(impl->section,
                                                 FILE_MAP_ALL_ACCESS, 0, 0,
-                                                sizeof(wcan_shm_bus_t));
+                                                sizeof(wcan_bus_t));
     if (impl->bus == NULL) {
         impl_destroy(impl);
         return WCAN_ERROR_IO;
@@ -616,20 +616,20 @@ int wcan_shm_open_ex(wcan_shm_socket_t *socket, const char *bus_name,
     /* The section is zero filled on creation, so the first process through
        here initializes it. Publishing "initialized" last keeps joiners from
        observing a half-built header. */
-    if (impl->bus->initialized != 1u || impl->bus->magic != WCAN_SHM_MAGIC) {
+    if (impl->bus->initialized != 1u || impl->bus->magic != WCAN_MAGIC) {
         memset(impl->bus, 0, sizeof(*impl->bus));
-        impl->bus->magic = WCAN_SHM_MAGIC;
-        impl->bus->version = WCAN_SHM_VERSION;
+        impl->bus->magic = WCAN_MAGIC;
+        impl->bus->version = WCAN_LAYOUT_VERSION;
         impl->bus->bitrate = effective.bitrate != 0u ? effective.bitrate
-                                                     : WCAN_SHM_DEFAULT_BITRATE;
-        impl->bus->flags = effective.flags & ~WCAN_SHM_OPEN_ECHO;
+                                                     : WCAN_DEFAULT_BITRATE;
+        impl->bus->flags = effective.flags & ~WCAN_OPEN_ECHO;
         impl->bus->max_lead_us = effective.max_lead_us;
         impl->bus->qpc_frequency = (uint64_t)qpc_frequency();
         impl->bus->bus_free_at = (uint64_t)qpc_now();
         (void)snprintf(impl->bus->bus_name, sizeof(impl->bus->bus_name), "%s",
                        bus_name);
         impl->bus->initialized = 1u;
-    } else if (impl->bus->version != WCAN_SHM_VERSION) {
+    } else if (impl->bus->version != WCAN_LAYOUT_VERSION) {
         bus_unlock(impl);
         impl_destroy(impl);
         return WCAN_ERROR_PROTOCOL;
@@ -662,13 +662,13 @@ int wcan_shm_open_ex(wcan_shm_socket_t *socket, const char *bus_name,
     node = &impl->bus->nodes[impl->node_index];
     memset(node, 0, sizeof(*node));
     node->owner_pid = (uint32_t)GetCurrentProcessId();
-    node->echo = (effective.flags & WCAN_SHM_OPEN_ECHO) != 0u ? 1u : 0u;
+    node->echo = (effective.flags & WCAN_OPEN_ECHO) != 0u ? 1u : 0u;
     node->active = 1u;
 
     /* A paced bus schedules on a sub-millisecond cadence, so raise the timer
        resolution rather than spin through every wait. */
-    if ((impl->bus->flags & (WCAN_SHM_BUS_PACE_ADMISSION |
-                             WCAN_SHM_BUS_PACE_DELIVERY)) != 0u) {
+    if ((impl->bus->flags & (WCAN_BUS_PACE_ADMISSION |
+                             WCAN_BUS_PACE_DELIVERY)) != 0u) {
         if (timeBeginPeriod(1) == TIMERR_NOERROR) {
             impl->timer_raised = 1;
         }
@@ -680,11 +680,11 @@ int wcan_shm_open_ex(wcan_shm_socket_t *socket, const char *bus_name,
     return WCAN_OK;
 }
 
-int wcan_shm_send(wcan_shm_socket_t *socket, const wcan_frame_t *frame)
+int wcan_send(wcan_socket_t *socket, const wcan_frame_t *frame)
 {
-    wcan_shm_impl_t *impl;
-    wcan_shm_pending_t entry;
-    uint32_t targets[WCAN_SHM_MAX_NODES];
+    wcan_impl_t *impl;
+    wcan_pending_t entry;
+    uint32_t targets[WCAN_MAX_NODES];
     uint32_t target_count = 0;
     uint32_t index;
     int status;
@@ -696,7 +696,7 @@ int wcan_shm_send(wcan_shm_socket_t *socket, const wcan_frame_t *frame)
     if (status != WCAN_OK) {
         return status;
     }
-    impl = (wcan_shm_impl_t *)socket->impl;
+    impl = (wcan_impl_t *)socket->impl;
     if (impl == NULL || !operation_begin(impl)) {
         return WCAN_ERROR_CLOSED;
     }
@@ -727,7 +727,7 @@ int wcan_shm_send(wcan_shm_socket_t *socket, const wcan_frame_t *frame)
         (void)schedule_pending(impl->bus, now);
 
         frequency = (long long)impl->bus->qpc_frequency;
-        paced = (impl->bus->flags & WCAN_SHM_BUS_PACE_ADMISSION) != 0u;
+        paced = (impl->bus->flags & WCAN_BUS_PACE_ADMISSION) != 0u;
         lead_ticks = (long long)(((uint64_t)impl->bus->max_lead_us *
                                   impl->bus->qpc_frequency) /
                                  1000000u);
@@ -752,7 +752,7 @@ int wcan_shm_send(wcan_shm_socket_t *socket, const wcan_frame_t *frame)
             continue;
         }
 
-        if (impl->bus->pending_count >= WCAN_SHM_MAX_PENDING) {
+        if (impl->bus->pending_count >= WCAN_MAX_PENDING) {
             const long long target = (long long)impl->bus->bus_free_at;
 
             bus_unlock(impl);
@@ -767,14 +767,14 @@ int wcan_shm_send(wcan_shm_socket_t *socket, const wcan_frame_t *frame)
         entry.slot.sequence = impl->bus->sequence++;
         entry.arrival = now;
         entry.bits = wcan_frame_bits(
-            frame, (impl->bus->flags & WCAN_SHM_BUS_WORST_CASE_STUFFING) != 0u);
+            frame, (impl->bus->flags & WCAN_BUS_WORST_CASE_STUFFING) != 0u);
         impl->bus->pending[impl->bus->pending_count] = entry;
         impl->bus->pending_count++;
         impl->bus->queued_bits += entry.bits;
 
         (void)schedule_pending(impl->bus, now);
 
-        for (index = 0; index < WCAN_SHM_MAX_NODES; ++index) {
+        for (index = 0; index < WCAN_MAX_NODES; ++index) {
             if (impl->bus->nodes[index].active != 1u) {
                 continue;
             }
@@ -800,28 +800,28 @@ int wcan_shm_send(wcan_shm_socket_t *socket, const wcan_frame_t *frame)
     return WCAN_OK;
 }
 
-int wcan_shm_recv(wcan_shm_socket_t *socket, wcan_frame_t *frame)
+int wcan_recv(wcan_socket_t *socket, wcan_frame_t *frame)
 {
-    return wcan_shm_recv_timeout(socket, frame, WCAN_INFINITE);
+    return wcan_recv_timeout(socket, frame, WCAN_INFINITE);
 }
 
-int wcan_shm_recv_timeout(wcan_shm_socket_t *socket, wcan_frame_t *frame,
+int wcan_recv_timeout(wcan_socket_t *socket, wcan_frame_t *frame,
                           uint32_t timeout_ms)
 {
-    wcan_shm_impl_t *impl;
+    wcan_impl_t *impl;
     ULONGLONG start = GetTickCount64();
     int result = WCAN_ERROR_IO;
 
     if (socket == NULL || frame == NULL) {
         return WCAN_ERROR_INVALID_ARGUMENT;
     }
-    impl = (wcan_shm_impl_t *)socket->impl;
+    impl = (wcan_impl_t *)socket->impl;
     if (impl == NULL || !operation_begin(impl)) {
         return WCAN_ERROR_CLOSED;
     }
 
     for (;;) {
-        wcan_shm_slot_t slot;
+        wcan_slot_t slot;
         HANDLE wait_handles[3];
         DWORD wait_result;
         DWORD remaining;
@@ -841,12 +841,12 @@ int wcan_shm_recv_timeout(wcan_shm_socket_t *socket, wcan_frame_t *frame,
         (void)schedule_pending(impl->bus, now);
 
         {
-            wcan_shm_node_t *node = &impl->bus->nodes[impl->node_index];
+            wcan_node_t *node = &impl->bus->nodes[impl->node_index];
 
             if (node->count > 0u) {
-                const wcan_shm_slot_t *head = &node->ring[node->head];
+                const wcan_slot_t *head = &node->ring[node->head];
 
-                if ((impl->bus->flags & WCAN_SHM_BUS_PACE_DELIVERY) != 0u &&
+                if ((impl->bus->flags & WCAN_BUS_PACE_DELIVERY) != 0u &&
                     head->bus_time > now) {
                     /* The frame exists but has not finished transmitting on
                        the virtual bus yet. */
@@ -865,7 +865,7 @@ int wcan_shm_recv_timeout(wcan_shm_socket_t *socket, wcan_frame_t *frame,
         }
         frequency = (long long)impl->bus->qpc_frequency;
         precise_wake =
-            (impl->bus->flags & WCAN_SHM_BUS_PACE_DELIVERY) != 0u ? 1 : 0;
+            (impl->bus->flags & WCAN_BUS_PACE_DELIVERY) != 0u ? 1 : 0;
         bus_unlock(impl);
 
         if (popped) {
@@ -943,15 +943,15 @@ int wcan_shm_recv_timeout(wcan_shm_socket_t *socket, wcan_frame_t *frame,
     return result;
 }
 
-int wcan_shm_bus_stats(wcan_shm_socket_t *socket, wcan_shm_bus_stats_t *stats)
+int wcan_bus_stats(wcan_socket_t *socket, wcan_bus_stats_t *stats)
 {
-    wcan_shm_impl_t *impl;
+    wcan_impl_t *impl;
     int status;
 
     if (socket == NULL || stats == NULL) {
         return WCAN_ERROR_INVALID_ARGUMENT;
     }
-    impl = (wcan_shm_impl_t *)socket->impl;
+    impl = (wcan_impl_t *)socket->impl;
     if (impl == NULL) {
         return WCAN_ERROR_CLOSED;
     }
@@ -964,7 +964,7 @@ int wcan_shm_bus_stats(wcan_shm_socket_t *socket, wcan_shm_bus_stats_t *stats)
     stats->frames = impl->bus->total_frames;
     stats->bits = impl->bus->total_bits;
     stats->bitrate = impl->bus->bitrate;
-    stats->segment_bytes = (uint32_t)sizeof(wcan_shm_bus_t);
+    stats->segment_bytes = (uint32_t)sizeof(wcan_bus_t);
     stats->bus_seconds =
         (double)impl->bus->total_bits / (double)impl->bus->bitrate;
     if (impl->bus->total_frames > 0u) {
@@ -980,28 +980,28 @@ int wcan_shm_bus_stats(wcan_shm_socket_t *socket, wcan_shm_bus_stats_t *stats)
     return WCAN_OK;
 }
 
-int wcan_shm_cancel(wcan_shm_socket_t *socket)
+int wcan_cancel(wcan_socket_t *socket)
 {
-    wcan_shm_impl_t *impl;
+    wcan_impl_t *impl;
 
     if (socket == NULL) {
         return WCAN_ERROR_INVALID_ARGUMENT;
     }
-    impl = (wcan_shm_impl_t *)socket->impl;
+    impl = (wcan_impl_t *)socket->impl;
     if (impl == NULL) {
         return WCAN_ERROR_CLOSED;
     }
     return SetEvent(impl->cancel_event) ? WCAN_OK : WCAN_ERROR_IO;
 }
 
-int wcan_shm_close(wcan_shm_socket_t *socket)
+int wcan_close(wcan_socket_t *socket)
 {
-    wcan_shm_impl_t *impl;
+    wcan_impl_t *impl;
 
     if (socket == NULL) {
         return WCAN_ERROR_INVALID_ARGUMENT;
     }
-    impl = (wcan_shm_impl_t *)socket->impl;
+    impl = (wcan_impl_t *)socket->impl;
     if (impl == NULL) {
         return WCAN_OK;
     }
@@ -1025,14 +1025,14 @@ int wcan_shm_close(wcan_shm_socket_t *socket)
     return WCAN_OK;
 }
 
-int wcan_shm_node_index(wcan_shm_socket_t *socket, uint32_t *out_index)
+int wcan_node_index(wcan_socket_t *socket, uint32_t *out_index)
 {
-    wcan_shm_impl_t *impl;
+    wcan_impl_t *impl;
 
     if (socket == NULL || out_index == NULL) {
         return WCAN_ERROR_INVALID_ARGUMENT;
     }
-    impl = (wcan_shm_impl_t *)socket->impl;
+    impl = (wcan_impl_t *)socket->impl;
     if (impl == NULL) {
         return WCAN_ERROR_CLOSED;
     }
@@ -1040,15 +1040,15 @@ int wcan_shm_node_index(wcan_shm_socket_t *socket, uint32_t *out_index)
     return WCAN_OK;
 }
 
-int wcan_shm_overruns(wcan_shm_socket_t *socket, uint32_t *out_overruns)
+int wcan_overruns(wcan_socket_t *socket, uint32_t *out_overruns)
 {
-    wcan_shm_impl_t *impl;
+    wcan_impl_t *impl;
     int status;
 
     if (socket == NULL || out_overruns == NULL) {
         return WCAN_ERROR_INVALID_ARGUMENT;
     }
-    impl = (wcan_shm_impl_t *)socket->impl;
+    impl = (wcan_impl_t *)socket->impl;
     if (impl == NULL) {
         return WCAN_ERROR_CLOSED;
     }
@@ -1061,9 +1061,9 @@ int wcan_shm_overruns(wcan_shm_socket_t *socket, uint32_t *out_overruns)
     return WCAN_OK;
 }
 
-int wcan_shm_node_count(wcan_shm_socket_t *socket, uint32_t *out_count)
+int wcan_node_count(wcan_socket_t *socket, uint32_t *out_count)
 {
-    wcan_shm_impl_t *impl;
+    wcan_impl_t *impl;
     uint32_t index;
     uint32_t total = 0;
     int status;
@@ -1071,7 +1071,7 @@ int wcan_shm_node_count(wcan_shm_socket_t *socket, uint32_t *out_count)
     if (socket == NULL || out_count == NULL) {
         return WCAN_ERROR_INVALID_ARGUMENT;
     }
-    impl = (wcan_shm_impl_t *)socket->impl;
+    impl = (wcan_impl_t *)socket->impl;
     if (impl == NULL) {
         return WCAN_ERROR_CLOSED;
     }
@@ -1079,7 +1079,7 @@ int wcan_shm_node_count(wcan_shm_socket_t *socket, uint32_t *out_count)
     if (status != WCAN_OK) {
         return status;
     }
-    for (index = 0; index < WCAN_SHM_MAX_NODES; ++index) {
+    for (index = 0; index < WCAN_MAX_NODES; ++index) {
         if (impl->bus->nodes[index].active == 1u) {
             total++;
         }
@@ -1090,31 +1090,31 @@ int wcan_shm_node_count(wcan_shm_socket_t *socket, uint32_t *out_count)
 }
 
 /*
- * ctypes and similar runtimes cannot portably express wcan_shm_socket_t, so
+ * ctypes and similar runtimes cannot portably express wcan_socket_t, so
  * the library allocates and frees it on their behalf and they only ever hold
  * an opaque pointer.
  */
-wcan_shm_socket_t *wcan_shm_handle_alloc(void)
+wcan_socket_t *wcan_handle_alloc(void)
 {
-    return (wcan_shm_socket_t *)calloc(1, sizeof(wcan_shm_socket_t));
+    return (wcan_socket_t *)calloc(1, sizeof(wcan_socket_t));
 }
 
-void wcan_shm_handle_free(wcan_shm_socket_t *socket)
+void wcan_handle_free(wcan_socket_t *socket)
 {
     if (socket != NULL) {
         if (socket->impl != NULL) {
-            (void)wcan_shm_close(socket);
+            (void)wcan_close(socket);
         }
         free(socket);
     }
 }
 
-uint32_t wcan_shm_abi_version(void)
+uint32_t wcan_abi_version(void)
 {
-    return WCAN_SHM_VERSION;
+    return WCAN_LAYOUT_VERSION;
 }
 
-uint32_t wcan_shm_segment_size(void)
+uint32_t wcan_segment_size(void)
 {
-    return (uint32_t)sizeof(wcan_shm_bus_t);
+    return (uint32_t)sizeof(wcan_bus_t);
 }

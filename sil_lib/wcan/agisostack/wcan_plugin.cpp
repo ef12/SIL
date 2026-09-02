@@ -43,13 +43,13 @@ namespace isobus
 			return;
 		}
 
-		wcan_shm_params_t params;
+		wcan_params_t params;
 		std::memset(&params, 0, sizeof(params));
 		params.bitrate = bitrate; // zero adopts the existing bus rate
-		params.flags = receiveOwnMessages ? static_cast<std::uint32_t>(WCAN_SHM_OPEN_ECHO)
+		params.flags = receiveOwnMessages ? static_cast<std::uint32_t>(WCAN_OPEN_ECHO)
 		                                  : 0u;
 
-		if (WCAN_OK == wcan_shm_open_ex(&socket, busName.c_str(), &params))
+		if (WCAN_OK == wcan_open_ex(&socket, busName.c_str(), &params))
 		{
 			running.store(true);
 		}
@@ -59,10 +59,10 @@ namespace isobus
 	{
 		if (running.exchange(false))
 		{
-			// wcan_shm_close cancels a blocked read_frame and waits for it to
+			// wcan_close cancels a blocked read_frame and waits for it to
 			// return before releasing any state, so this is safe to call from a
 			// different thread than the one reading.
-			(void)wcan_shm_close(&socket);
+			(void)wcan_close(&socket);
 		}
 	}
 
@@ -76,7 +76,7 @@ namespace isobus
 		wcan_frame_t frame;
 		std::memset(&frame, 0, sizeof(frame));
 
-		if (WCAN_OK != wcan_shm_recv_timeout(&socket, &frame, readTimeoutMs))
+		if (WCAN_OK != wcan_recv_timeout(&socket, &frame, readTimeoutMs))
 		{
 			return false;
 		}
@@ -116,7 +116,7 @@ namespace isobus
 		frame.dlc = canFrame.dataLength;
 		std::memcpy(frame.data, canFrame.data, canFrame.dataLength);
 
-		return WCAN_OK == wcan_shm_send(&socket, &frame);
+		return WCAN_OK == wcan_send(&socket, &frame);
 	}
 
 	void WCANPlugin::set_read_timeout(std::uint32_t milliseconds)

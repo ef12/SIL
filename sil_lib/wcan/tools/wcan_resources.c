@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "wcan_shm.h"
+#include "wcan.h"
 
 #define MAX_SOCKETS 16u
 
@@ -49,7 +49,7 @@ static void report(const char *label, const snapshot_t *before,
            (double)handle_delta / (double)sockets);
 }
 
-static int open_group(wcan_shm_socket_t *sockets, unsigned int count,
+static int open_group(wcan_socket_t *sockets, unsigned int count,
                       int distinct_buses)
 {
     unsigned int index;
@@ -62,7 +62,7 @@ static int open_group(wcan_shm_socket_t *sockets, unsigned int count,
         } else {
             (void)snprintf(bus, sizeof(bus), "res.shared");
         }
-        if (wcan_shm_open(&sockets[index], bus, 0) != WCAN_OK) {
+        if (wcan_open(&sockets[index], bus, 0) != WCAN_OK) {
             fprintf(stderr, "open failed at %u\n", index);
             return 0;
         }
@@ -70,27 +70,27 @@ static int open_group(wcan_shm_socket_t *sockets, unsigned int count,
     return 1;
 }
 
-static void close_group(wcan_shm_socket_t *sockets, unsigned int count)
+static void close_group(wcan_socket_t *sockets, unsigned int count)
 {
     unsigned int index;
 
     for (index = 0; index < count; ++index) {
-        (void)wcan_shm_close(&sockets[index]);
+        (void)wcan_close(&sockets[index]);
     }
 }
 
 int main(void)
 {
-    wcan_shm_socket_t sockets[MAX_SOCKETS];
-    wcan_shm_socket_t probe = WCAN_SHM_SOCKET_INITIALIZER;
-    wcan_shm_bus_stats_t stats;
+    wcan_socket_t sockets[MAX_SOCKETS];
+    wcan_socket_t probe = WCAN_SOCKET_INITIALIZER;
+    wcan_bus_stats_t stats;
     snapshot_t before;
     snapshot_t after;
 
     memset(sockets, 0, sizeof(sockets));
 
-    if (wcan_shm_open(&probe, "res.probe", 0) != WCAN_OK ||
-        wcan_shm_bus_stats(&probe, &stats) != WCAN_OK) {
+    if (wcan_open(&probe, "res.probe", 0) != WCAN_OK ||
+        wcan_bus_stats(&probe, &stats) != WCAN_OK) {
         fprintf(stderr, "probe open failed\n");
         return 1;
     }
@@ -100,7 +100,7 @@ int main(void)
     printf("  kernel objects per bus: 1 section, 1 bus mutex, and one mutex\n");
     printf("                          plus one event per occupied node slot\n");
     printf("  background threads created by the library: 0\n\n");
-    (void)wcan_shm_close(&probe);
+    (void)wcan_close(&probe);
 
     puts("per-process cost (deltas measured around the calls)");
 
@@ -143,7 +143,7 @@ int main(void)
         frame.flags = WCAN_FLAG_EXTENDED;
         frame.dlc = 8;
         for (index = 0; index < 4u; ++index) {
-            (void)wcan_shm_send(&sockets[index], &frame);
+            (void)wcan_send(&sockets[index], &frame);
         }
     }
     take_snapshot(&after);

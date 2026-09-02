@@ -15,12 +15,14 @@ and could therefore only ever connect two peers.
 
 | Path | Contents |
 |------|----------|
-| `wcan.h` | Core types, status codes, frame flags, validation |
-| `wcan_shm.h` / `wcan_shm.c` | The shared-memory transport and bit-time scheduler |
+| `wcan.h` / `wcan.c` | The transport API, shared-memory implementation and bit-time scheduler |
+| `wcan_types.h` | Frame type, status codes and format flags |
+| `wcan_validate.h` / `.c` | Bus name and frame validation, status descriptions |
+| `wcan_airtime.h` / `.c` | Bit-time model, portable and platform independent |
 | `wcan_layout.h` | Segment layout: the cross-process ABI |
 | `wcan_export.h` | Export and calling-convention control for DLL builds |
-| `wcan_validate.c` | Bus name and frame validation, status descriptions |
-| `test/` | Transport, bit-time and layout test programs |
+| `test/` | Ceedling unit tests for the portable logic |
+| `check/` | Integration and diagnostic programs, built with `WCAN_BUILD_CHECKS` |
 | `tools/` | `wcan_peer` reference node, `wcan_resources` footprint report |
 | `python/` | `ctypes` binding and an ISOBUS injection example |
 | `agisostack/` | `CANHardwarePlugin` implementation for AgIsoStack |

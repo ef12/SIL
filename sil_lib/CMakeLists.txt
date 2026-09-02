@@ -28,7 +28,7 @@ if(WIN32)
     target_sources(sil_lib PRIVATE
         wcan/wcan_validate.c
         wcan/wcan_airtime.c
-        wcan/wcan_shm.c
+        wcan/wcan.c
     )
     target_link_libraries(sil_lib PUBLIC advapi32 winmm)
 
@@ -97,7 +97,8 @@ if(WIN32)
     install(FILES
         wcan/wcan.h
         wcan/wcan_types.h
-        wcan/wcan_shm.h
+        wcan/wcan_validate.h
+        wcan/wcan_airtime.h
         wcan/wcan_export.h
         wcan/wcan_layout.h
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/sil_lib

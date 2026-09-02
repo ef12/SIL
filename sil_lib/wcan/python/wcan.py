@@ -137,7 +137,7 @@ class _CFrame(ctypes.Structure):
 
 
 class _CParams(ctypes.Structure):
-    """Mirrors ``wcan_shm_params_t``."""
+    """Mirrors ``wcan_params_t``."""
 
     _fields_ = [
         ("bitrate", c_uint32),
@@ -147,7 +147,7 @@ class _CParams(ctypes.Structure):
 
 
 class _CStats(ctypes.Structure):
-    """Mirrors ``wcan_shm_bus_stats_t``."""
+    """Mirrors ``wcan_bus_stats_t``."""
 
     _fields_ = [
         ("frames", c_uint64),
@@ -309,32 +309,32 @@ def load_library(path: str | os.PathLike | None = None):
             f"the interpreter's bitness. Tried:\n" + "\n".join(errors)
         )
 
-    library.wcan_shm_handle_alloc.restype = c_void_p
-    library.wcan_shm_handle_alloc.argtypes = []
-    library.wcan_shm_handle_free.restype = None
-    library.wcan_shm_handle_free.argtypes = [c_void_p]
-    library.wcan_shm_open.restype = c_int
-    library.wcan_shm_open.argtypes = [c_void_p, c_char_p, c_uint32]
-    library.wcan_shm_open_ex.restype = c_int
-    library.wcan_shm_open_ex.argtypes = [c_void_p, c_char_p, POINTER(_CParams)]
-    library.wcan_shm_send.restype = c_int
-    library.wcan_shm_send.argtypes = [c_void_p, POINTER(_CFrame)]
-    library.wcan_shm_recv_timeout.restype = c_int
-    library.wcan_shm_recv_timeout.argtypes = [c_void_p, POINTER(_CFrame), c_uint32]
-    library.wcan_shm_cancel.restype = c_int
-    library.wcan_shm_cancel.argtypes = [c_void_p]
-    library.wcan_shm_close.restype = c_int
-    library.wcan_shm_close.argtypes = [c_void_p]
-    library.wcan_shm_bus_stats.restype = c_int
-    library.wcan_shm_bus_stats.argtypes = [c_void_p, POINTER(_CStats)]
-    library.wcan_shm_node_count.restype = c_int
-    library.wcan_shm_node_count.argtypes = [c_void_p, POINTER(c_uint32)]
+    library.wcan_handle_alloc.restype = c_void_p
+    library.wcan_handle_alloc.argtypes = []
+    library.wcan_handle_free.restype = None
+    library.wcan_handle_free.argtypes = [c_void_p]
+    library.wcan_open.restype = c_int
+    library.wcan_open.argtypes = [c_void_p, c_char_p, c_uint32]
+    library.wcan_open_ex.restype = c_int
+    library.wcan_open_ex.argtypes = [c_void_p, c_char_p, POINTER(_CParams)]
+    library.wcan_send.restype = c_int
+    library.wcan_send.argtypes = [c_void_p, POINTER(_CFrame)]
+    library.wcan_recv_timeout.restype = c_int
+    library.wcan_recv_timeout.argtypes = [c_void_p, POINTER(_CFrame), c_uint32]
+    library.wcan_cancel.restype = c_int
+    library.wcan_cancel.argtypes = [c_void_p]
+    library.wcan_close.restype = c_int
+    library.wcan_close.argtypes = [c_void_p]
+    library.wcan_bus_stats.restype = c_int
+    library.wcan_bus_stats.argtypes = [c_void_p, POINTER(_CStats)]
+    library.wcan_node_count.restype = c_int
+    library.wcan_node_count.argtypes = [c_void_p, POINTER(c_uint32)]
     library.wcan_frame_bits.restype = c_uint32
     library.wcan_frame_bits.argtypes = [POINTER(_CFrame), c_int]
-    library.wcan_shm_abi_version.restype = c_uint32
-    library.wcan_shm_abi_version.argtypes = []
-    library.wcan_shm_segment_size.restype = c_uint32
-    library.wcan_shm_segment_size.argtypes = []
+    library.wcan_abi_version.restype = c_uint32
+    library.wcan_abi_version.argtypes = []
+    library.wcan_segment_size.restype = c_uint32
+    library.wcan_segment_size.argtypes = []
 
     if path is None:
         _library = library
@@ -363,7 +363,7 @@ class Bus:
     ):
         self._library = library or load_library()
         self.name = name
-        self._handle = self._library.wcan_shm_handle_alloc()
+        self._handle = self._library.wcan_handle_alloc()
         if not self._handle:
             raise MemoryError("could not allocate a WCAN handle")
 
@@ -372,11 +372,11 @@ class Bus:
             flags=(OPEN_ECHO if echo else 0) | pacing,
             max_lead_us=max_lead_us,
         )
-        status = self._library.wcan_shm_open_ex(
+        status = self._library.wcan_open_ex(
             self._handle, name.encode("ascii"), ctypes.byref(params)
         )
         if status != _OK:
-            self._library.wcan_shm_handle_free(self._handle)
+            self._library.wcan_handle_free(self._handle)
             self._handle = None
             _check(status, f"open({name!r})")
 
@@ -385,7 +385,7 @@ class Bus:
         self._require_open()
         native = _CFrame(can_id=frame.id, dlc=len(frame.data), flags=frame.flags)
         ctypes.memmove(native.data, frame.data, len(frame.data))
-        _check(self._library.wcan_shm_send(self._handle, ctypes.byref(native)), "send")
+        _check(self._library.wcan_send(self._handle, ctypes.byref(native)), "send")
 
     def recv(self, timeout: float | None = None) -> Frame:
         """Returns the next frame, raising :class:`WcanTimeout` if none arrives."""
@@ -393,7 +393,7 @@ class Bus:
         native = _CFrame()
         milliseconds = _INFINITE if timeout is None else max(0, int(timeout * 1000))
         _check(
-            self._library.wcan_shm_recv_timeout(
+            self._library.wcan_recv_timeout(
                 self._handle, ctypes.byref(native), milliseconds
             ),
             "recv",
@@ -423,14 +423,14 @@ class Bus:
     def cancel(self) -> None:
         """Wakes a blocked :meth:`recv` without closing the bus."""
         self._require_open()
-        _check(self._library.wcan_shm_cancel(self._handle), "cancel")
+        _check(self._library.wcan_cancel(self._handle), "cancel")
 
     def stats(self) -> BusStats:
         """Returns a snapshot of bus activity."""
         self._require_open()
         native = _CStats()
         _check(
-            self._library.wcan_shm_bus_stats(self._handle, ctypes.byref(native)),
+            self._library.wcan_bus_stats(self._handle, ctypes.byref(native)),
             "stats",
         )
         return BusStats(
@@ -448,7 +448,7 @@ class Bus:
         self._require_open()
         count = c_uint32()
         _check(
-            self._library.wcan_shm_node_count(self._handle, ctypes.byref(count)),
+            self._library.wcan_node_count(self._handle, ctypes.byref(count)),
             "node_count",
         )
         return count.value
@@ -464,7 +464,7 @@ class Bus:
     def close(self) -> None:
         """Detaches this node. Safe to call more than once."""
         if self._handle:
-            self._library.wcan_shm_handle_free(self._handle)
+            self._library.wcan_handle_free(self._handle)
             self._handle = None
 
     def _require_open(self) -> None:

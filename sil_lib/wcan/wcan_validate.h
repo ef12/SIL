@@ -10,6 +10,7 @@
 #define WCAN_VALIDATE_H
 
 #include "wcan_types.h"
+#include "wcan_export.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,7 +26,7 @@ extern "C" {
  * @return WCAN_OK, WCAN_ERROR_INVALID_ARGUMENT for NULL, or
  *         WCAN_ERROR_INVALID_BUS.
  */
-int wcan_validate_bus_name(const char *bus_name);
+WCAN_API int WCAN_CALL wcan_validate_bus_name(const char *bus_name);
 
 /**
  * @brief Validates a frame against its declared format.
@@ -39,7 +40,7 @@ int wcan_validate_bus_name(const char *bus_name);
  * @return WCAN_OK, WCAN_ERROR_INVALID_ARGUMENT for NULL, or
  *         WCAN_ERROR_INVALID_FRAME.
  */
-int wcan_validate_frame(const wcan_frame_t *frame);
+WCAN_API int WCAN_CALL wcan_validate_frame(const wcan_frame_t *frame);
 
 /**
  * @brief Returns a human readable description of a status code.
@@ -47,7 +48,7 @@ int wcan_validate_frame(const wcan_frame_t *frame);
  * @param status Any WCAN status code.
  * @return A static string; never NULL.
  */
-const char *wcan_strerror(int status);
+WCAN_API const char *WCAN_CALL wcan_strerror(int status);
 
 #ifdef __cplusplus
 }

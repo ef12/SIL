@@ -6,7 +6,7 @@
  * validation over a frame, so it can be unit tested on any host and used by a
  * consumer that has not opened a bus yet.
  *
- * The transport API lives in wcan_shm.h; the shared-memory layout that forms
+ * The transport API lives in wcan.h; the shared-memory layout that forms
  * the cross-process ABI is in wcan_layout.h.
  */
 

@@ -1,5 +1,5 @@
-#ifndef WCAN_SHM_LAYOUT_H
-#define WCAN_SHM_LAYOUT_H
+#ifndef WCAN_LAYOUT_H
+#define WCAN_LAYOUT_H
 
 /*
  * Shared-memory segment layout.
@@ -17,12 +17,12 @@
 
 #include "wcan_types.h"
 
-#define WCAN_SHM_MAGIC 0x4d485357u /* 'WSHM' */
-#define WCAN_SHM_VERSION 2u
-#define WCAN_SHM_MAX_NODES 64u
-#define WCAN_SHM_RING_CAPACITY 128u
-#define WCAN_SHM_MAX_PENDING 128u
-#define WCAN_SHM_NAME_SIZE (WCAN_MAX_BUS_NAME + 1u)
+#define WCAN_MAGIC 0x4d485357u /* 'WSHM' */
+#define WCAN_LAYOUT_VERSION 2u
+#define WCAN_MAX_NODES 64u
+#define WCAN_RING_CAPACITY 128u
+#define WCAN_MAX_PENDING 128u
+#define WCAN_NAME_SIZE (WCAN_MAX_BUS_NAME + 1u)
 
 #if defined(__cplusplus)
 #define WCAN_STATIC_ASSERT(condition, name) static_assert(condition, #name)
@@ -43,15 +43,15 @@ typedef struct {
     uint8_t data[WCAN_MAX_DATA]; /*  8 */
     uint64_t bus_time;    /* 72 */
     uint64_t sequence;    /* 80 */
-} wcan_shm_slot_t;        /* 88 */
+} wcan_slot_t;        /* 88 */
 
 /** A frame offered to the bus that has not yet won arbitration. */
 typedef struct {
-    wcan_shm_slot_t slot; /*   0 */
+    wcan_slot_t slot; /*   0 */
     uint64_t arrival;     /*  88 */
     uint32_t sender;      /*  96 */
     uint32_t bits;        /* 100 */
-} wcan_shm_pending_t;     /* 104 */
+} wcan_pending_t;     /* 104 */
 
 /** Per-node state and its receive ring. */
 typedef struct {
@@ -62,8 +62,8 @@ typedef struct {
     uint32_t count;       /* 16 */
     uint32_t overrun;     /* 20 */
     uint32_t reserved[2]; /* 24, aligns the ring to 8 */
-    wcan_shm_slot_t ring[WCAN_SHM_RING_CAPACITY]; /* 32 */
-} wcan_shm_node_t;
+    wcan_slot_t ring[WCAN_RING_CAPACITY]; /* 32 */
+} wcan_node_t;
 
 /** The whole bus. */
 typedef struct {
@@ -82,31 +82,31 @@ typedef struct {
     uint64_t total_frames;  /* 64 */
     uint64_t total_bits;    /* 72 */
     uint64_t queued_bits;   /* 80 */
-    char bus_name[WCAN_SHM_NAME_SIZE];             /*  88 */
-    wcan_shm_pending_t pending[WCAN_SHM_MAX_PENDING]; /* 152 */
-    wcan_shm_node_t nodes[WCAN_SHM_MAX_NODES];
-} wcan_shm_bus_t;
+    char bus_name[WCAN_NAME_SIZE];             /*  88 */
+    wcan_pending_t pending[WCAN_MAX_PENDING]; /* 152 */
+    wcan_node_t nodes[WCAN_MAX_NODES];
+} wcan_bus_t;
 
-WCAN_STATIC_ASSERT(sizeof(wcan_shm_slot_t) == 88u, slot_size);
-WCAN_STATIC_ASSERT(sizeof(wcan_shm_pending_t) == 104u, pending_size);
-WCAN_STATIC_ASSERT(sizeof(wcan_shm_node_t) == 32u + (88u * WCAN_SHM_RING_CAPACITY),
+WCAN_STATIC_ASSERT(sizeof(wcan_slot_t) == 88u, slot_size);
+WCAN_STATIC_ASSERT(sizeof(wcan_pending_t) == 104u, pending_size);
+WCAN_STATIC_ASSERT(sizeof(wcan_node_t) == 32u + (88u * WCAN_RING_CAPACITY),
                    node_size);
-WCAN_STATIC_ASSERT(sizeof(wcan_shm_bus_t) ==
-                       152u + (104u * WCAN_SHM_MAX_PENDING) +
-                           ((32u + (88u * WCAN_SHM_RING_CAPACITY)) *
-                            WCAN_SHM_MAX_NODES),
+WCAN_STATIC_ASSERT(sizeof(wcan_bus_t) ==
+                       152u + (104u * WCAN_MAX_PENDING) +
+                           ((32u + (88u * WCAN_RING_CAPACITY)) *
+                            WCAN_MAX_NODES),
                    bus_size);
 
-WCAN_STATIC_ASSERT(offsetof(wcan_shm_slot_t, data) == 8u, slot_data_offset);
-WCAN_STATIC_ASSERT(offsetof(wcan_shm_slot_t, bus_time) == 72u,
+WCAN_STATIC_ASSERT(offsetof(wcan_slot_t, data) == 8u, slot_data_offset);
+WCAN_STATIC_ASSERT(offsetof(wcan_slot_t, bus_time) == 72u,
                    slot_bus_time_offset);
-WCAN_STATIC_ASSERT(offsetof(wcan_shm_pending_t, arrival) == 88u,
+WCAN_STATIC_ASSERT(offsetof(wcan_pending_t, arrival) == 88u,
                    pending_arrival_offset);
-WCAN_STATIC_ASSERT(offsetof(wcan_shm_node_t, ring) == 32u, node_ring_offset);
-WCAN_STATIC_ASSERT(offsetof(wcan_shm_bus_t, qpc_frequency) == 32u,
+WCAN_STATIC_ASSERT(offsetof(wcan_node_t, ring) == 32u, node_ring_offset);
+WCAN_STATIC_ASSERT(offsetof(wcan_bus_t, qpc_frequency) == 32u,
                    bus_qpc_offset);
-WCAN_STATIC_ASSERT(offsetof(wcan_shm_bus_t, bus_name) == 88u, bus_name_offset);
-WCAN_STATIC_ASSERT(offsetof(wcan_shm_bus_t, pending) == 152u,
+WCAN_STATIC_ASSERT(offsetof(wcan_bus_t, bus_name) == 88u, bus_name_offset);
+WCAN_STATIC_ASSERT(offsetof(wcan_bus_t, pending) == 152u,
                    bus_pending_offset);
 
-#endif /* WCAN_SHM_LAYOUT_H */
+#endif /* WCAN_LAYOUT_H */

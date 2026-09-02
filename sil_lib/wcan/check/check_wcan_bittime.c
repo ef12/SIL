@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "wcan_shm.h"
+#include "wcan.h"
 
 #define CHECK(condition)                                                       \
     do {                                                                       \
@@ -115,10 +115,10 @@ static int test_airtime(void)
 
 /* ---------------------------------------------------------------- */
 
-static int expect_id(wcan_shm_socket_t *socket, uint32_t identifier)
+static int expect_id(wcan_socket_t *socket, uint32_t identifier)
 {
     wcan_frame_t frame;
-    int status = wcan_shm_recv_timeout(socket, &frame, 3000);
+    int status = wcan_recv_timeout(socket, &frame, 3000);
 
     if (status != WCAN_OK) {
         fprintf(stderr, "receive: %s\n", wcan_strerror(status));
@@ -134,31 +134,31 @@ static int expect_id(wcan_shm_socket_t *socket, uint32_t identifier)
 
 static int test_arbitration(void)
 {
-    wcan_shm_params_t params;
-    wcan_shm_socket_t observer = WCAN_SHM_SOCKET_INITIALIZER;
-    wcan_shm_socket_t a = WCAN_SHM_SOCKET_INITIALIZER;
-    wcan_shm_socket_t b = WCAN_SHM_SOCKET_INITIALIZER;
-    wcan_shm_socket_t c = WCAN_SHM_SOCKET_INITIALIZER;
+    wcan_params_t params;
+    wcan_socket_t observer = WCAN_SOCKET_INITIALIZER;
+    wcan_socket_t a = WCAN_SOCKET_INITIALIZER;
+    wcan_socket_t b = WCAN_SOCKET_INITIALIZER;
+    wcan_socket_t c = WCAN_SOCKET_INITIALIZER;
     wcan_frame_t frame;
 
     memset(&params, 0, sizeof(params));
     params.bitrate = ISOBUS_BITRATE;
-    params.flags = WCAN_SHM_BUS_PACE_ADMISSION;
+    params.flags = WCAN_BUS_PACE_ADMISSION;
 
-    CHECK(wcan_shm_open_ex(&observer, "bt.arb", &params) == WCAN_OK);
-    CHECK(wcan_shm_open_ex(&a, "bt.arb", &params) == WCAN_OK);
-    CHECK(wcan_shm_open_ex(&b, "bt.arb", &params) == WCAN_OK);
-    CHECK(wcan_shm_open_ex(&c, "bt.arb", &params) == WCAN_OK);
+    CHECK(wcan_open_ex(&observer, "bt.arb", &params) == WCAN_OK);
+    CHECK(wcan_open_ex(&a, "bt.arb", &params) == WCAN_OK);
+    CHECK(wcan_open_ex(&b, "bt.arb", &params) == WCAN_OK);
+    CHECK(wcan_open_ex(&c, "bt.arb", &params) == WCAN_OK);
 
     /* The first frame seizes an idle bus. The next two are offered while it is
        still transmitting, so they arbitrate against each other rather than
        being relayed in arrival order. */
     make_frame(&frame, 0x300u, 8, 0);
-    CHECK(wcan_shm_send(&a, &frame) == WCAN_OK);
+    CHECK(wcan_send(&a, &frame) == WCAN_OK);
     make_frame(&frame, 0x200u, 8, 0);
-    CHECK(wcan_shm_send(&c, &frame) == WCAN_OK);
+    CHECK(wcan_send(&c, &frame) == WCAN_OK);
     make_frame(&frame, 0x100u, 8, 0);
-    CHECK(wcan_shm_send(&b, &frame) == WCAN_OK);
+    CHECK(wcan_send(&b, &frame) == WCAN_OK);
 
     CHECK(expect_id(&observer, 0x300u));
     CHECK(expect_id(&observer, 0x100u));
@@ -173,13 +173,13 @@ static int test_arbitration(void)
      * loses both arbitrations and goes last.
      */
     make_frame(&frame, 0x001u, 8, 0);
-    CHECK(wcan_shm_send(&c, &frame) == WCAN_OK);
+    CHECK(wcan_send(&c, &frame) == WCAN_OK);
     make_frame(&frame, 0x700u, 8, 0);
-    CHECK(wcan_shm_send(&b, &frame) == WCAN_OK);
+    CHECK(wcan_send(&b, &frame) == WCAN_OK);
     make_frame(&frame, 0x600u, 8, 0);
-    CHECK(wcan_shm_send(&a, &frame) == WCAN_OK);
+    CHECK(wcan_send(&a, &frame) == WCAN_OK);
     make_frame(&frame, 0x050u, 8, 0);
-    CHECK(wcan_shm_send(&a, &frame) == WCAN_OK);
+    CHECK(wcan_send(&a, &frame) == WCAN_OK);
 
     CHECK(expect_id(&observer, 0x001u));
     CHECK(expect_id(&observer, 0x600u));
@@ -188,10 +188,10 @@ static int test_arbitration(void)
     printf("  per-sender FIFO held: node A's 0x600 precedes its own 0x050\n");
     printf("  cross-sender priority held: 0x600 and 0x050 both beat 0x700\n");
 
-    CHECK(wcan_shm_close(&c) == WCAN_OK);
-    CHECK(wcan_shm_close(&b) == WCAN_OK);
-    CHECK(wcan_shm_close(&a) == WCAN_OK);
-    CHECK(wcan_shm_close(&observer) == WCAN_OK);
+    CHECK(wcan_close(&c) == WCAN_OK);
+    CHECK(wcan_close(&b) == WCAN_OK);
+    CHECK(wcan_close(&a) == WCAN_OK);
+    CHECK(wcan_close(&observer) == WCAN_OK);
     puts("arbitration passed");
     return 0;
 }
@@ -199,7 +199,7 @@ static int test_arbitration(void)
 /* ---------------------------------------------------------------- */
 
 typedef struct {
-    wcan_shm_socket_t *socket;
+    wcan_socket_t *socket;
     unsigned int target;
     volatile LONG received;
     HANDLE ready;
@@ -213,7 +213,7 @@ static DWORD WINAPI consumer_thread(void *argument)
     for (;;) {
         wcan_frame_t frame;
 
-        if (wcan_shm_recv_timeout(consumer->socket, &frame, 2000) != WCAN_OK) {
+        if (wcan_recv_timeout(consumer->socket, &frame, 2000) != WCAN_OK) {
             break;
         }
         if ((unsigned int)InterlockedIncrement(&consumer->received) >=
@@ -227,10 +227,10 @@ static DWORD WINAPI consumer_thread(void *argument)
 static int measure_pacing(const char *bus, uint32_t flags, const char *label,
                           unsigned int frames)
 {
-    wcan_shm_params_t params;
-    wcan_shm_socket_t producer = WCAN_SHM_SOCKET_INITIALIZER;
-    wcan_shm_socket_t consumer_socket = WCAN_SHM_SOCKET_INITIALIZER;
-    wcan_shm_bus_stats_t stats;
+    wcan_params_t params;
+    wcan_socket_t producer = WCAN_SOCKET_INITIALIZER;
+    wcan_socket_t consumer_socket = WCAN_SOCKET_INITIALIZER;
+    wcan_bus_stats_t stats;
     consumer_t consumer;
     wcan_frame_t frame;
     HANDLE thread;
@@ -247,8 +247,8 @@ static int measure_pacing(const char *bus, uint32_t flags, const char *label,
     params.bitrate = ISOBUS_BITRATE;
     params.flags = flags;
 
-    CHECK(wcan_shm_open_ex(&producer, bus, &params) == WCAN_OK);
-    CHECK(wcan_shm_open_ex(&consumer_socket, bus, &params) == WCAN_OK);
+    CHECK(wcan_open_ex(&producer, bus, &params) == WCAN_OK);
+    CHECK(wcan_open_ex(&consumer_socket, bus, &params) == WCAN_OK);
 
     memset(&consumer, 0, sizeof(consumer));
     consumer.socket = &consumer_socket;
@@ -265,7 +265,7 @@ static int measure_pacing(const char *bus, uint32_t flags, const char *label,
     cpu_start = process_cpu_seconds();
     start = now_seconds();
     for (index = 0; index < frames; ++index) {
-        if (wcan_shm_send(&producer, &frame) != WCAN_OK) {
+        if (wcan_send(&producer, &frame) != WCAN_OK) {
             break;
         }
     }
@@ -275,13 +275,13 @@ static int measure_pacing(const char *bus, uint32_t flags, const char *label,
     cpu_used = process_cpu_seconds() - cpu_start;
     CloseHandle(thread);
 
-    CHECK(wcan_shm_bus_stats(&producer, &stats) == WCAN_OK);
+    CHECK(wcan_bus_stats(&producer, &stats) == WCAN_OK);
 
     printf("  %-22s frames %u x %u bits\n", label, frames, bits);
     printf("      theoretical bus time %8.3f s   send loop %8.3f s   "
            "wall %8.3f s\n",
            theoretical, send_done - start, all_done - start);
-    if ((flags & WCAN_SHM_BUS_PACE_ADMISSION) != 0u) {
+    if ((flags & WCAN_BUS_PACE_ADMISSION) != 0u) {
         printf("      pacing error %+6.2f %%\n",
                100.0 * ((all_done - start) - theoretical) / theoretical);
     }
@@ -293,8 +293,8 @@ static int measure_pacing(const char *bus, uint32_t flags, const char *label,
            100.0 * stats.utilization, cpu_used,
            100.0 * cpu_used / (all_done - start));
 
-    CHECK(wcan_shm_close(&consumer_socket) == WCAN_OK);
-    CHECK(wcan_shm_close(&producer) == WCAN_OK);
+    CHECK(wcan_close(&consumer_socket) == WCAN_OK);
+    CHECK(wcan_close(&producer) == WCAN_OK);
     CloseHandle(consumer.ready);
     return 0;
 }
@@ -303,34 +303,34 @@ static int measure_pacing(const char *bus, uint32_t flags, const char *label,
 
 static int test_bitrate_config(void)
 {
-    wcan_shm_params_t params;
-    wcan_shm_socket_t creator = WCAN_SHM_SOCKET_INITIALIZER;
-    wcan_shm_socket_t inheritor = WCAN_SHM_SOCKET_INITIALIZER;
-    wcan_shm_socket_t mismatched = WCAN_SHM_SOCKET_INITIALIZER;
-    wcan_shm_bus_stats_t stats;
+    wcan_params_t params;
+    wcan_socket_t creator = WCAN_SOCKET_INITIALIZER;
+    wcan_socket_t inheritor = WCAN_SOCKET_INITIALIZER;
+    wcan_socket_t mismatched = WCAN_SOCKET_INITIALIZER;
+    wcan_bus_stats_t stats;
 
     memset(&params, 0, sizeof(params));
     params.bitrate = 9u; /* below the accepted range */
-    CHECK(wcan_shm_open_ex(&creator, "bt.cfg", &params) ==
+    CHECK(wcan_open_ex(&creator, "bt.cfg", &params) ==
           WCAN_ERROR_INVALID_ARGUMENT);
 
     params.bitrate = 500000u;
-    CHECK(wcan_shm_open_ex(&creator, "bt.cfg", &params) == WCAN_OK);
+    CHECK(wcan_open_ex(&creator, "bt.cfg", &params) == WCAN_OK);
 
     /* Zero means inherit, so a joiner never has to restate the bus setup. */
     memset(&params, 0, sizeof(params));
-    CHECK(wcan_shm_open_ex(&inheritor, "bt.cfg", &params) == WCAN_OK);
-    CHECK(wcan_shm_bus_stats(&inheritor, &stats) == WCAN_OK);
+    CHECK(wcan_open_ex(&inheritor, "bt.cfg", &params) == WCAN_OK);
+    CHECK(wcan_bus_stats(&inheritor, &stats) == WCAN_OK);
     CHECK(stats.bitrate == 500000u);
 
     /* Joining at the wrong bitrate must fail loudly rather than silently
        adopting the bus and misjudging every timing on it. */
     params.bitrate = 250000u;
-    CHECK(wcan_shm_open_ex(&mismatched, "bt.cfg", &params) ==
+    CHECK(wcan_open_ex(&mismatched, "bt.cfg", &params) ==
           WCAN_ERROR_PROTOCOL);
 
-    CHECK(wcan_shm_close(&inheritor) == WCAN_OK);
-    CHECK(wcan_shm_close(&creator) == WCAN_OK);
+    CHECK(wcan_close(&inheritor) == WCAN_OK);
+    CHECK(wcan_close(&creator) == WCAN_OK);
     printf("  inherit, validate and reject mismatched bitrates\n");
     puts("bitrate configuration passed");
     return 0;
@@ -338,10 +338,10 @@ static int test_bitrate_config(void)
 
 static int measure_rate(uint32_t bitrate)
 {
-    wcan_shm_params_t params;
-    wcan_shm_socket_t producer = WCAN_SHM_SOCKET_INITIALIZER;
-    wcan_shm_socket_t consumer_socket = WCAN_SHM_SOCKET_INITIALIZER;
-    wcan_shm_bus_stats_t stats;
+    wcan_params_t params;
+    wcan_socket_t producer = WCAN_SOCKET_INITIALIZER;
+    wcan_socket_t consumer_socket = WCAN_SOCKET_INITIALIZER;
+    wcan_bus_stats_t stats;
     consumer_t consumer;
     wcan_frame_t frame;
     HANDLE thread;
@@ -357,10 +357,10 @@ static int measure_rate(uint32_t bitrate)
 
     memset(&params, 0, sizeof(params));
     params.bitrate = bitrate;
-    params.flags = WCAN_SHM_BUS_PACE_ADMISSION;
+    params.flags = WCAN_BUS_PACE_ADMISSION;
 
-    CHECK(wcan_shm_open_ex(&producer, bus, &params) == WCAN_OK);
-    CHECK(wcan_shm_open_ex(&consumer_socket, bus, &params) == WCAN_OK);
+    CHECK(wcan_open_ex(&producer, bus, &params) == WCAN_OK);
+    CHECK(wcan_open_ex(&consumer_socket, bus, &params) == WCAN_OK);
 
     memset(&consumer, 0, sizeof(consumer));
     consumer.socket = &consumer_socket;
@@ -376,7 +376,7 @@ static int measure_rate(uint32_t bitrate)
 
     start = now_seconds();
     for (index = 0; index < frames; ++index) {
-        if (wcan_shm_send(&producer, &frame) != WCAN_OK) {
+        if (wcan_send(&producer, &frame) != WCAN_OK) {
             break;
         }
     }
@@ -384,7 +384,7 @@ static int measure_rate(uint32_t bitrate)
     all_done = now_seconds();
     CloseHandle(thread);
 
-    CHECK(wcan_shm_bus_stats(&producer, &stats) == WCAN_OK);
+    CHECK(wcan_bus_stats(&producer, &stats) == WCAN_OK);
 
     printf("  %7lu bit/s  frame %6.1f us  %5u frames  theoretical %6.3f s  "
            "measured %6.3f s  error %+5.2f %%  util %5.1f %%\n",
@@ -394,8 +394,8 @@ static int measure_rate(uint32_t bitrate)
            100.0 * stats.utilization);
 
     CHECK((unsigned int)consumer.received == frames);
-    CHECK(wcan_shm_close(&consumer_socket) == WCAN_OK);
-    CHECK(wcan_shm_close(&producer) == WCAN_OK);
+    CHECK(wcan_close(&consumer_socket) == WCAN_OK);
+    CHECK(wcan_close(&producer) == WCAN_OK);
     CloseHandle(consumer.ready);
     return 0;
 }
@@ -416,12 +416,12 @@ int main(void)
     if (measure_pacing("bt.none", 0, "unpaced (reference)", 4000) != 0) {
         return 1;
     }
-    if (measure_pacing("bt.adm", WCAN_SHM_BUS_PACE_ADMISSION, "admission pacing",
+    if (measure_pacing("bt.adm", WCAN_BUS_PACE_ADMISSION, "admission pacing",
                        4000) != 0) {
         return 1;
     }
     if (measure_pacing("bt.del",
-                       WCAN_SHM_BUS_PACE_ADMISSION | WCAN_SHM_BUS_PACE_DELIVERY,
+                       WCAN_BUS_PACE_ADMISSION | WCAN_BUS_PACE_DELIVERY,
                        "admission + delivery", 4000) != 0) {
         return 1;
     }

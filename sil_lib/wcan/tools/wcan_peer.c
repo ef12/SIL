@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "wcan_shm.h"
+#include "wcan.h"
 
 static int parse_hex(const char *text, uint8_t *data, uint8_t *length)
 {
@@ -35,7 +35,7 @@ static int parse_hex(const char *text, uint8_t *data, uint8_t *length)
 static int do_send(const char *bus, const char *id_text, const char *hex,
                    unsigned int count)
 {
-    wcan_shm_socket_t socket = WCAN_SHM_SOCKET_INITIALIZER;
+    wcan_socket_t socket = WCAN_SOCKET_INITIALIZER;
     wcan_frame_t frame;
     unsigned int index;
     int status;
@@ -48,31 +48,31 @@ static int do_send(const char *bus, const char *id_text, const char *hex,
         return 2;
     }
 
-    status = wcan_shm_open(&socket, bus, 0);
+    status = wcan_open(&socket, bus, 0);
     if (status != WCAN_OK) {
         fprintf(stderr, "open %s: %s\n", bus, wcan_strerror(status));
         return 1;
     }
     for (index = 0; index < count; ++index) {
-        status = wcan_shm_send(&socket, &frame);
+        status = wcan_send(&socket, &frame);
         if (status != WCAN_OK) {
             fprintf(stderr, "send: %s\n", wcan_strerror(status));
-            (void)wcan_shm_close(&socket);
+            (void)wcan_close(&socket);
             return 1;
         }
         printf("TX %08lX [%u]\n", (unsigned long)frame.can_id,
                (unsigned int)frame.dlc);
     }
     fflush(stdout);
-    (void)wcan_shm_close(&socket);
+    (void)wcan_close(&socket);
     return 0;
 }
 
 static int do_recv(const char *bus, unsigned int count, uint32_t timeout_ms)
 {
-    wcan_shm_socket_t socket = WCAN_SHM_SOCKET_INITIALIZER;
+    wcan_socket_t socket = WCAN_SOCKET_INITIALIZER;
     unsigned int received = 0;
-    int status = wcan_shm_open(&socket, bus, 0);
+    int status = wcan_open(&socket, bus, 0);
 
     if (status != WCAN_OK) {
         fprintf(stderr, "open %s: %s\n", bus, wcan_strerror(status));
@@ -85,7 +85,7 @@ static int do_recv(const char *bus, unsigned int count, uint32_t timeout_ms)
         wcan_frame_t frame;
         unsigned int index;
 
-        status = wcan_shm_recv_timeout(&socket, &frame, timeout_ms);
+        status = wcan_recv_timeout(&socket, &frame, timeout_ms);
         if (status != WCAN_OK) {
             fprintf(stderr, "recv: %s\n", wcan_strerror(status));
             break;
@@ -100,7 +100,7 @@ static int do_recv(const char *bus, unsigned int count, uint32_t timeout_ms)
         received++;
     }
 
-    (void)wcan_shm_close(&socket);
+    (void)wcan_close(&socket);
     return received == count ? 0 : 1;
 }
 

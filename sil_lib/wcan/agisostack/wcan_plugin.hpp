@@ -18,7 +18,7 @@
 #include "isobus/hardware_integration/can_hardware_plugin.hpp"
 #include "isobus/isobus/can_message_frame.hpp"
 
-#include "wcan_shm.h"
+#include "wcan.h"
 
 namespace isobus
 {
@@ -77,7 +77,7 @@ namespace isobus
 		const bool receiveOwnMessages;
 		const std::uint32_t bitrate;
 		std::uint32_t readTimeoutMs = DEFAULT_READ_TIMEOUT_MS;
-		wcan_shm_socket_t socket = WCAN_SHM_SOCKET_INITIALIZER;
+		wcan_socket_t socket = WCAN_SOCKET_INITIALIZER;
 		std::atomic<bool> running{ false };
 	};
 }

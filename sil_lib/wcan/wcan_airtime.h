@@ -10,6 +10,7 @@
 #define WCAN_AIRTIME_H
 
 #include "wcan_types.h"
+#include "wcan_export.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,7 +35,8 @@ extern "C" {
  * @param worst_case Non-zero to assume maximum stuffing.
  * @return Bit count, or zero if @a frame is NULL.
  */
-uint32_t wcan_frame_bits(const wcan_frame_t *frame, int worst_case);
+WCAN_API uint32_t WCAN_CALL wcan_frame_bits(const wcan_frame_t *frame,
+                                            int worst_case);
 
 /**
  * @brief Returns how long a frame occupies the bus, in microseconds.
@@ -44,8 +46,9 @@ uint32_t wcan_frame_bits(const wcan_frame_t *frame, int worst_case);
  * @param worst_case Non-zero to assume maximum stuffing.
  * @return Airtime in microseconds, or zero if @a bitrate is zero.
  */
-uint32_t wcan_frame_airtime_us(const wcan_frame_t *frame, uint32_t bitrate,
-                               int worst_case);
+WCAN_API uint32_t WCAN_CALL wcan_frame_airtime_us(const wcan_frame_t *frame,
+                                                  uint32_t bitrate,
+                                                  int worst_case);
 
 #ifdef __cplusplus
 }
