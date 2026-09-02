@@ -21,11 +21,23 @@ add_library(sil_lib
     vcan/can_emulator/can_emulator.c
     vcan/sil_vcan_config.c
 )
+
+# WCAN is a Windows-only virtual CAN bus built on a shared-memory segment. It
+# has no POSIX equivalent, so it is compiled in only on Windows.
+if(WIN32)
+    target_sources(sil_lib PRIVATE
+        wcan/wcan_validate.c
+        wcan/wcan_shm.c
+    )
+    target_link_libraries(sil_lib PUBLIC advapi32 winmm)
+endif()
+
 target_include_directories(sil_lib
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/drivers>
         $<BUILD_INTERFACE:${SIL_IO_CONFIG_ROOT}>
         $<BUILD_INTERFACE:${SIL_VCAN_CONFIG_ROOT}>
+        $<BUILD_INTERFACE:${SIL_WCAN_ROOT}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/sil_lib>
     PRIVATE
@@ -57,6 +69,18 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/sil_lib_version.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/sil_lib
 )
+
+if(WIN32)
+    # wcan_layout.h is public because it defines the cross-process ABI that
+    # every node maps, including consumers built by another toolchain.
+    install(FILES
+        wcan/wcan.h
+        wcan/wcan_shm.h
+        wcan/wcan_export.h
+        wcan/wcan_layout.h
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/sil_lib
+    )
+endif()
 
 install(EXPORT SilLibTargets
     FILE SilLibTargets.cmake

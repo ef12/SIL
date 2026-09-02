@@ -21,6 +21,7 @@ set(FAN_CONTROLLER_ROOT ${SW_ROOT}/modules/fan_controller)
 set(IO_DRIVER_ROOT ${SW_ROOT}/drivers/io)
 set(SIL_IO_CONFIG_ROOT ${SIL_LIB_ROOT}/io)
 set(SIL_VCAN_CONFIG_ROOT ${SIL_LIB_ROOT}/vcan)
+set(SIL_WCAN_ROOT ${SIL_LIB_ROOT}/wcan)
 
 set(UDP_SOCKET_PLATFORM_LIBS)
 if(WIN32)
